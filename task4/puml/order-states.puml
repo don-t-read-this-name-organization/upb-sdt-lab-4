@@ -1,0 +1,18 @@
+@startuml order-states
+!theme plain
+
+[*] --> PLACED : customer places order
+PLACED --> PAYMENT_AUTHORIZED : payment authorized
+PLACED --> CANCELLED : payment failed
+PAYMENT_AUTHORIZED --> ACCEPTED : restaurant accepts
+PAYMENT_AUTHORIZED --> REJECTED : restaurant rejects\nor 3 min timeout
+PAYMENT_AUTHORIZED --> CANCELLED : customer cancels
+ACCEPTED --> PREPARING : restaurant starts cooking
+PREPARING --> READY_FOR_PICKUP : food is ready
+READY_FOR_PICKUP --> PICKED_UP : courier confirms pickup
+PICKED_UP --> DELIVERED : courier confirms delivery
+DELIVERED --> [*] : payment captured
+REJECTED --> [*] : authorization voided
+CANCELLED --> [*] : authorization voided (if any)
+
+@enduml

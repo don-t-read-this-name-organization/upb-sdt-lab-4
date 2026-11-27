@@ -1,0 +1,35 @@
+@startuml seq-delete-account
+!theme plain
+autonumber
+
+actor "User" as U
+participant "Web Client" as C
+participant "API Gateway" as GW
+participant "Identity\nService" as ID
+queue "Kafka" as K
+participant "Social" as SOC
+participant "Playlist" as PL
+participant "Session" as SS
+participant "Chat" as CH
+
+U -> C : "Delete my account"
+C -> GW : DELETE /me (password confirmation)
+GW -> ID : forward
+ID -> ID : deactivate account, log the user out
+ID ->> K : UserDeleted {userId}
+ID --> C : 202 Accepted
+
+par
+  K ->> SOC : UserDeleted
+  SOC -> SOC : delete profile, friendships, invitations
+else
+  K ->> PL : UserDeleted
+  PL -> PL : owned playlists → given to an editor, or deleted
+else
+  K ->> SS : UserDeleted
+  SS -> SS : end sessions hosted by the user
+else
+  K ->> CH : UserDeleted
+  CH -> CH : delete the user's messages
+end
+@enduml

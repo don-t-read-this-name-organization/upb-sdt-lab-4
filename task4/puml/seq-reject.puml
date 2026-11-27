@@ -1,0 +1,43 @@
+@startuml seq-reject
+!theme plain
+autonumber
+
+participant "Restaurant\nDashboard" as D
+participant "Order Service\n(+ OrderSaga)" as ORD
+database "Order DB" as ODB
+participant "Payment\nService" as PAY
+participant "Payment Provider\n(PSP)" as PSP
+queue "Kafka" as K
+participant "Realtime\nGateway" as RT
+participant "Customer\nWeb App" as C
+participant "Notification\nService" as N
+
+alt restaurant rejects
+  D -> ORD : POST /orders/{id}/reject {reason: "out of stock"}
+  ORD -> ODB : saga = COMPENSATING
+else no answer within 3 min
+  ORD -> ORD : onTimeout(now): deadline passed
+  ORD -> ODB : saga = COMPENSATING
+end
+
+ORD -> PAY : POST /payments/{id}/void (Idempotency-Key)
+PAY -> PSP : cancel authorization
+PSP --> PAY : cancelled (money released)
+PAY -> PAY : status = VOIDED\nappend LedgerEntry(VOID)
+PAY --> ORD : 200
+ORD -> ODB : status = REJECTED\nsaga = DONE + outbox(OrderRejected)
+ORD ->> K : OrderRejected {reason}
+par
+  K ->> RT : OrderRejected
+  RT ->> C : WS "Sorry, the restaurant can't take your order.\nYou were not charged."
+else
+  K ->> N : OrderRejected
+  N ->> C : push / e-mail
+end
+
+note over ORD, PAY
+  If the void call fails, the saga keeps the
+  step COMPENSATING and retries with backoff.
+  A compensation step must eventually succeed.
+end note
+@enduml

@@ -1,0 +1,60 @@
+@startuml class-overview
+!theme plain
+hide members
+skinparam packageStyle rectangle
+
+package "Identity" {
+  class UserAccount
+  class RefreshToken
+}
+package "User & Social" {
+  class UserProfile
+  class Friendship
+  class Invitation
+}
+package "Playlist " {
+  class Playlist
+  class PlaylistEntry
+  class Collaborator
+}
+package "Catalog" {
+  class Track
+  class Album
+  class Artist
+}
+package "Media" {
+  class AudioAsset
+  class StreamGrant
+}
+package "Listening Session" {
+  class ListeningSession
+  class PlaybackState
+  class Participant
+  class PlaybackCommand
+}
+package "Chat" {
+  class ChatMessage
+}
+
+UserAccount *-- RefreshToken
+UserProfile -- Friendship
+UserProfile -- Invitation
+Playlist *-- PlaylistEntry
+Playlist *-- Collaborator
+Album o-- Track
+Artist -- Track
+AudioAsset ..> StreamGrant
+ListeningSession *-- PlaybackState
+ListeningSession *-- Participant
+ListeningSession ..> PlaybackCommand
+
+UserProfile ..> UserAccount : «ref by ID»
+Playlist ..> UserAccount : «ref by ID»
+PlaylistEntry ..> Track : «ref by ID»
+AudioAsset ..> Track : «ref by ID»
+ListeningSession ..> Playlist : «ref by ID»
+PlaybackState ..> PlaylistEntry : «ref by ID»
+ChatMessage ..> ListeningSession : «ref by ID»
+Invitation ..> Playlist : «ref by ID»
+Invitation ..> ListeningSession : «ref by ID»
+@enduml

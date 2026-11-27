@@ -1,0 +1,66 @@
+@startuml seq-restaurant-status
+!theme plain
+autonumber
+
+actor "Restaurant staff" as S
+participant "Restaurant\nDashboard" as D
+participant "API Gateway" as GW
+participant "Order Service\n(+ OrderSaga)" as ORD
+database "Order DB" as ODB
+participant "ETA\nService" as ETA
+queue "Kafka" as K
+participant "Realtime\nGateway" as RT
+participant "Customer\nWeb App" as C
+participant "Notification\nService" as N
+
+S -> D : "Accept", prep time 15 min
+D -> GW : POST /orders/{id}/accept\n{prepTimeMin: 15, expectedVersion: 2}
+GW -> ORD : forward (userId, restaurantId from JWT)
+ORD -> ODB : load order + saga
+
+alt order belongs to another restaurant
+  ORD --> GW : 403
+  GW --> D : 403
+else version changed or not in PAYMENT_AUTHORIZED
+  ORD --> GW : 409 Conflict (e.g. customer just cancelled)
+  GW --> D : show current state
+else ok
+  ORD -> ETA : re-estimate with prepTimeMin = 15
+  ETA --> ORD : new estimatedDeliveryAt
+  ORD -> ODB : status = ACCEPTED, version = 3\nsaga = PREPARING\ndispatchAt = readyAt - courier travel time\n+ outbox(OrderAccepted)
+  ORD --> GW : 200
+  GW --> D : order moves to "In progress"
+  ORD ->> K : OrderAccepted {eta}
+  par
+    K ->> RT : OrderAccepted
+    RT ->> C : WS "Restaurant accepted, arriving 12:45"
+  else
+    K ->> N : OrderAccepted
+    N ->> C : push notification
+  end
+end
+
+== Later updates ==
+
+S -> D : "Start cooking"
+D -> GW : POST /orders/{id}/status {PREPARING}
+GW -> ORD : forward
+ORD -> ODB : status = PREPARING + outbox
+ORD ->> K : OrderStatusChanged
+K ->> RT
+RT ->> C : WS "Being prepared"
+
+S -> D : "Ready for pickup"
+D -> GW : POST /orders/{id}/status {READY_FOR_PICKUP}
+GW -> ORD : forward
+ORD -> ODB : status = READY_FOR_PICKUP + outbox
+ORD ->> K : OrderReady
+K ->> RT
+RT ->> C : WS "Ready, waiting for courier"
+
+note over ORD
+  canTransition() allows only the arrows
+  of the state diagram. "Ready" before
+  "Accepted" is rejected with 409.
+end note
+@enduml

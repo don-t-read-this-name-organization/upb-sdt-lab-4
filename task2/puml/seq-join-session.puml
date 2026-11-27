@@ -1,0 +1,67 @@
+@startuml seq-join-session
+!theme plain
+autonumber
+
+actor "Friend" as F
+participant "Web Client" as C
+participant "API Gateway" as GW
+participant "Realtime\nGateway" as RT
+participant "Listening Session\nService" as SS
+database "Redis" as R
+participant "Media\nService" as MS
+participant "CDN" as CDN
+participant "Chat\nService" as CH
+participant "Other participants'\nclients" as O
+
+note over F, C
+  The friend has already accepted the session
+  invitation (3.1), so Session.allow(userId) was called.
+end note
+
+C -> RT : WSS connect (JWT)
+RT -> RT : verify JWT signature and expiry
+RT -> R : register connection (userId → node)
+C -> RT : WS session.join {sessionId}
+RT -> SS : Join(userId, sessionId)
+SS -> R : load session + invitedUserIds
+
+alt session ENDED
+  SS --> RT : error SESSION_ENDED
+  RT --> C : WS session.error
+else user not invited
+  SS --> RT : error NOT_INVITED
+  RT --> C : WS session.error
+else ok
+  SS -> R : SADD session:{sid}:participants userId
+  SS --> RT : current PlaybackState + serverTime
+  RT -> R : subscribe this node to session:{sid}
+  RT --> C : WS session.joined {state}
+  SS -> R : PUBLISH session:{sid} participant.joined
+  R ->> RT : participant.joined
+  RT ->> O : WS participant.joined ("Ana joined")
+
+  group Clock synchronisation
+    loop 5 times
+      C -> RT : WS time.ping {t0}
+      RT --> C : WS time.pong {t0, serverTime}
+      C -> C : t1 = now, rtt = t1 - t0\noffset = serverTime - (t0 + t1) / 2
+    end
+    C -> C : keep the offset from the sample with the lowest rtt
+  end
+
+  group Catching up with the music
+    C -> GW : GET /media/tracks/{trackId}/stream
+    GW -> MS : forward
+    MS --> GW : StreamGrant {signed manifestUrl, expiresAt}
+    GW --> C : 200
+    C -> CDN : GET manifest + segment containing positionAt(now)
+    CDN --> C : audio segments
+    C -> C : readyAt = localNow + offset\nseek to positionAt(readyAt), play
+  end
+
+  C -> GW : GET /sessions/{sid}/messages?limit=50
+  GW -> CH : forward
+  CH --> GW : chat history
+  GW --> C : 200
+end
+@enduml

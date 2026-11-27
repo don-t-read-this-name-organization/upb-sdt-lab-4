@@ -1,0 +1,65 @@
+@startuml architecture
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+actor "Listener\n(Web SPA)" as user
+
+package "Edge" {
+  [CDN] as cdn
+  [API Gateway] as gw
+  [Realtime Gateway\n(WebSocket)] as rt
+}
+
+package "Core Services" {
+  [Identity Service] as idn
+  [User & Social Service] as social
+  [Playlist Service] as pl
+  [Catalog Service] as cat
+  [Media Service] as media
+  [Listening Session Service] as sess
+  [Chat Service] as chat
+  [Notification Service] as notif
+}
+
+queue "Event Bus\n(Kafka)" as bus
+database "Redis\n(session state, pub/sub)" as redis
+
+database "PostgreSQL\n(identity)" as dbId
+database "PostgreSQL\n(social, invitations)" as dbSoc
+database "PostgreSQL\n(playlists)" as dbPl
+database "OpenSearch\n(catalog index)" as os
+database "Cassandra\n(chat)" as cas
+storage "Object Storage\n(audio HLS)" as s3
+
+user --> gw : HTTPS / REST
+user <--> rt : WSS
+user --> cdn : HLS audio
+
+gw --> idn
+gw --> social
+gw --> pl
+gw --> cat
+gw --> media
+
+rt <--> sess : commands / state
+rt <--> chat : messages
+rt <-- redis : fan-out
+
+sess --> redis
+media --> s3
+cdn --> s3
+
+idn --> dbId
+social --> dbSoc
+pl --> dbPl
+cat --> os
+chat --> cas
+
+social --> bus : InvitationCreated
+pl --> bus : PlaylistTrackAdded
+chat --> bus : ChatMessageSent
+sess --> bus : SessionStarted/Ended
+bus --> notif
+bus --> rt : playlist updates
+@enduml

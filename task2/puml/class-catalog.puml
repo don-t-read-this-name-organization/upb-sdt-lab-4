@@ -1,0 +1,27 @@
+@startuml class-catalog
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+
+class Track {
+  - id: UUID
+  - title: String
+  - durationMs: long
+  - explicit: boolean
+  - genre: String
+}
+class Album {
+  - id: UUID
+  - title: String
+  - releaseDate: LocalDate
+  - coverUrl: String
+}
+class Artist {
+  - id: UUID
+  - name: String
+  - bio: String
+}
+Album "1" o-- "1..*" Track
+Artist "1..*" -- "0..*" Track : performs >
+Artist "1..*" -- "0..*" Album : releases >
+@enduml

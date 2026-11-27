@@ -1,0 +1,40 @@
+@startuml seq-delete-account
+!theme plain
+autonumber
+
+actor "Customer" as U
+participant "Web App" as C
+participant "API Gateway" as GW
+participant "Identity\nService" as ID
+queue "Kafka" as K
+participant "Customer\nService" as CUS
+participant "Order\nService" as ORD
+participant "Payment\nService" as PAY
+participant "Courier Location\nService" as LOC
+
+U -> C : "Delete my account"
+C -> GW : DELETE /me (password confirmation)
+GW -> ID : forward
+alt an order is still in progress
+  ID --> C : 409 "Wait until your order is delivered"
+else no active order
+  ID -> ID : deactivate account, log out everywhere
+  ID ->> K : UserDeleted {userId}
+  ID --> C : 202 Accepted
+  par
+    K ->> CUS : UserDeleted
+    CUS -> CUS : delete profile and addresses
+  else
+    K ->> ORD : UserDeleted
+    ORD -> ORD : anonymize orders: remove name,\naddress text, phone, notes;\nkeep amounts, items, dates
+  else
+    K ->> PAY : UserDeleted
+    PAY -> PAY : keep payments and ledger (accounting law)\nset customerId = null
+    opt customer has saved cards
+      PAY -> PSP : delete saved payment methods
+  else
+    K ->> LOC : UserDeleted
+    LOC -> LOC : delete delivery traces\nto this customer's addresses
+  end
+end
+@enduml

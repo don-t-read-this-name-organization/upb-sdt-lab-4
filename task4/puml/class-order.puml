@@ -1,0 +1,133 @@
+@startuml class-order
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class Cart <<Redis>> {
+  - customerId: UUID
+  - restaurantId: UUID
+  - items: List<CartItem>
+  - updatedAt: Instant
+  + add(menuItemId: UUID, qty: int): void
+  + remove(menuItemId: UUID): void
+  + clear(): void
+}
+class CartItem {
+  - menuItemId: UUID
+  - quantity: int
+  - notes: String
+}
+class Order {
+  - id: UUID
+  - customerId: UUID
+  - restaurantId: UUID
+  - courierId: UUID
+  - status: OrderStatus
+  - deliveryAddress: AddressSnapshot
+  - subtotal: Money
+  - deliveryFee: Money
+  - total: Money
+  - placedAt: Instant
+  - estimatedDeliveryAt: Instant
+  - version: long
+  + transitionTo(s: OrderStatus, by: UUID): void
+  + cancel(reason: String, by: UUID): void
+  - canTransition(from: OrderStatus, to: OrderStatus): boolean
+}
+class OrderItem {
+  - menuItemId: UUID
+  - nameSnapshot: String
+  - unitPrice: Money
+  - quantity: int
+  - notes: String
+  + lineTotal(): Money
+}
+class AddressSnapshot <<value object>> {
+  - text: String
+  - location: GeoPoint
+  - instructions: String
+}
+class StatusChange {
+  - from: OrderStatus
+  - to: OrderStatus
+  - changedBy: UUID
+  - changedAt: Instant
+}
+class OrderSaga {
+  - orderId: UUID
+  - step: SagaStep
+  - deadlineAt: Instant
+  - attempts: int
+  + onEvent(e: DomainEvent): void
+  + onTimeout(now: Instant): void
+  - compensate(): void
+}
+enum OrderStatus {
+  PLACED
+  PAYMENT_AUTHORIZED
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+enum SagaStep {
+  AUTHORIZING_PAYMENT
+  AWAITING_RESTAURANT
+  PREPARING
+  DISPATCHING
+  DELIVERING
+  CAPTURING_PAYMENT
+  COMPENSATING
+  DONE
+}
+
+class CustomerProfile <<external>>
+class Restaurant <<external>>
+class MenuItem <<external>>
+class CourierProfile <<external>>
+hide <<external>> members
+
+Cart "1" *-- "1..*" CartItem
+Order "1" *-- "1..*" OrderItem
+Order "1" *-- "1" AddressSnapshot
+Order "1" *-- "1..*" StatusChange
+Order "1" -- "1" OrderSaga : drives <
+Order --> OrderStatus
+OrderSaga --> SagaStep
+
+Order ..> CustomerProfile : customerId «ref by ID»
+Order ..> Restaurant : restaurantId «ref by ID»
+Order ..> CourierProfile : courierId «ref by ID»
+OrderItem ..> MenuItem : menuItemId «ref by ID»
+CartItem ..> MenuItem : menuItemId «ref by ID»
+
+abstract class DomainEvent <<immutable>> {
+  - eventId: UUID
+  - orderId: UUID
+  - occurredAt: Instant
+}
+class PaymentAuthorized
+class OrderAccepted
+class OrderRejected
+class CourierAssigned
+class OrderDelivered
+DomainEvent <|-- PaymentAuthorized
+DomainEvent <|-- OrderAccepted
+DomainEvent <|-- OrderRejected
+DomainEvent <|-- CourierAssigned
+DomainEvent <|-- OrderDelivered
+OrderSaga ..> DomainEvent : handles >
+note right of DomainEvent
+  only a few examples shown;
+  processed eventIds are stored
+  so duplicates are ignored
+end note
+@enduml

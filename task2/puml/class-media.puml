@@ -1,0 +1,32 @@
+@startuml class-media
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class AudioAsset {
+  - id: UUID
+  - trackId: UUID
+  - storageKey: String
+  - codec: String
+  - bitratesKbps: List<Integer>
+  - segmentDurationSec: int
+  + createStreamGrant(userId: UUID): StreamGrant
+}
+class StreamGrant {
+  - manifestUrl: String
+  - signature: String
+  - expiresAt: Instant
+  + isValid(now: Instant): boolean
+}
+
+class Track <<external>>
+hide <<external>> members
+
+AudioAsset ..> StreamGrant : creates >
+AudioAsset ..> Track : trackId «ref by ID»
+@enduml

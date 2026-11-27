@@ -1,0 +1,63 @@
+@startuml seq-playback-sync
+!theme plain
+autonumber
+
+actor "Host" as H
+participant "Host\nClient" as HC
+participant "Realtime\nGateway" as RT
+participant "Listening Session\nService" as SS
+database "Redis" as R
+participant "Playlist\nService" as PL
+participant "All participants'\nclients (incl. host)" as P
+participant "Media Service\n/ CDN" as M
+
+== Pause (Play works the same way) ==
+
+H -> HC : press Pause
+HC -> RT : WS session.command\n{type: PAUSE, expectedVersion: 41}
+RT -> SS : Command(userId, sessionId, cmd)
+SS -> R : GET session:{sid}:state
+R --> SS : state (version 41)
+
+alt userId != hostId
+  SS --> RT : error NOT_HOST
+  RT --> HC : WS session.error
+else expectedVersion != state.version
+  SS --> RT : error STALE_VERSION + current state
+  RT --> HC : WS session.state (resync)
+else valid
+  SS -> SS : executeAt = serverNow + 250 ms\npositionMs = positionAt(executeAt)\nisPlaying = false, version = 42
+  SS -> R : atomic compare-and-set\n(only if version is still 41)
+  SS -> R : PUBLISH session:{sid} session.state
+  R ->> RT : session.state (to every gateway node)
+  RT ->> P : WS session.state {state, executeAt}
+  P -> P : localTime = executeAt - clockOffset\nschedule the pause at localTime
+end
+
+== Skip (same checks as above) ==
+
+H -> HC : press Skip
+HC -> RT : WS session.command\n{type: SKIP, expectedVersion: 42}
+RT -> SS : Command(userId, sessionId, cmd)
+SS -> PL : GET /playlists/{pid}/entries/next?after={position}
+PL --> SS : next entry or none
+
+alt no next entry
+  SS -> SS : isPlaying = false (end of playlist)
+else next entry exists
+  SS -> SS : executeAt = serverNow + 800 ms\ntrackId = next.trackId, positionMs = 0\nstartedAt = executeAt, version = 43
+end
+SS -> R : compare-and-set + PUBLISH
+R ->> RT : session.state
+RT ->> P : WS session.state
+P -> M : stream grant + first HLS segments\n(usually already prefetched)
+P -> P : start at executeAt,\nor at positionAt(now) if the message arrived late
+
+note over SS
+  positionAt(t) = isPlaying
+     ? positionMs + (t - startedAt)
+     : positionMs
+  Skip allows more lead time (800 ms)
+  because clients may need to load the new track.
+end note
+@enduml

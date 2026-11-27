@@ -1,0 +1,62 @@
+@startuml class-playlist
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class Playlist {
+  - id: UUID
+  - ownerId: UUID
+  - name: String
+  - description: String
+  - visibility: Visibility
+  - version: long
+  - createdAt: Instant
+  + addTrack(trackId: UUID, by: UUID): PlaylistEntry
+  + removeEntry(entryId: UUID, by: UUID): void
+  + moveEntry(entryId: UUID, afterId: UUID, beforeId: UUID): void
+  + addCollaborator(userId: UUID, role: CollaboratorRole): void
+  + canEdit(userId: UUID): boolean
+  + nextEntryAfter(position: String): PlaylistEntry
+  + previousEntryBefore(position: String): PlaylistEntry
+}
+class PlaylistEntry {
+  - id: UUID
+  - trackId: UUID
+  - addedBy: UUID
+  - addedAt: Instant
+  - position: String
+}
+class Collaborator {
+  - userId: UUID
+  - role: CollaboratorRole
+  - joinedAt: Instant
+}
+enum CollaboratorRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+enum Visibility {
+  PRIVATE
+  FRIENDS
+  PUBLIC
+}
+
+class UserAccount <<external>>
+class Track <<external>>
+hide <<external>> members
+
+Playlist "1" *-- "0..*" PlaylistEntry
+Playlist "1" *-- "1..*" Collaborator
+Playlist --> Visibility
+Collaborator --> CollaboratorRole
+
+Playlist ..> UserAccount : ownerId «ref by ID»
+Collaborator ..> UserAccount : userId «ref by ID»
+PlaylistEntry ..> Track : trackId «ref by ID»
+@enduml

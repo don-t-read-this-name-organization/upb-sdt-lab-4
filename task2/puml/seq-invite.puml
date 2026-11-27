@@ -1,0 +1,70 @@
+@startuml seq-invite
+!theme plain
+autonumber
+
+actor "Inviter" as A
+participant "Web Client\n(Inviter)" as CA
+participant "API Gateway" as GW
+participant "User & Social\nService" as SOC
+database "Social DB\n(PostgreSQL)" as SDB
+participant "Playlist\nService" as PL
+queue "Kafka" as K
+participant "Notification\nService" as NOT
+participant "Realtime\nGateway" as RT
+participant "Web Client\n(Invitee)" as CB
+actor "Invitee" as B
+
+A -> CA : pick friend, click "Invite"
+CA -> GW : POST /invitations\n{inviteeId, targetType: PLAYLIST, targetId}
+GW -> GW : validate JWT, rate limit
+GW -> SOC : forward (inviterId from token)
+SOC -> SDB : find friendship(inviter, invitee)
+SDB --> SOC : status
+SOC -> PL : GET /playlists/{id}/permissions?userId={inviterId}
+PL --> SOC : role
+
+alt not friends, or role = VIEWER
+  SOC --> GW : 403 Forbidden
+  GW --> CA : 403
+else allowed (friends and role is OWNER/EDITOR)
+  SOC -> SDB : BEGIN\nINSERT invitation (PENDING, expiresAt = now + 7d)\nINSERT outbox(InvitationCreated)\nCOMMIT
+  SOC --> GW : 201 Created {invitationId}
+  GW --> CA : 201
+  SOC ->> K : InvitationCreated (outbox relay)
+  par notify offline
+    K ->> NOT : InvitationCreated
+    NOT ->> B : push / e-mail
+  else notify online
+    K ->> RT : InvitationCreated
+    RT ->> CB : WS invitation.received
+  end
+end
+
+== Invitee answers ==
+
+B -> CB : click "Accept"
+CB -> GW : POST /invitations/{id}/accept
+GW -> SOC : forward (userId from token)
+SOC -> SDB : load invitation
+
+alt expired, already answered, or not addressed to this user
+  SOC --> GW : 410 Gone / 403 Forbidden
+  GW --> CB : error
+else valid
+  SOC -> PL : POST /playlists/{id}/collaborators\n{userId: invitee, role: EDITOR}
+  PL --> SOC : 200 OK
+  SOC -> SDB : status = ACCEPTED + outbox(InvitationAccepted)
+  SOC --> GW : 200 {targetType, targetId}
+  GW --> CB : 200, open playlist
+  SOC ->> K : InvitationAccepted
+  K ->> RT : InvitationAccepted
+  RT ->> CA : WS invitation.accepted
+end
+
+note over SOC, PL
+  Session invitations follow the same flow, but the
+  Listening Session Service does the checks:
+  only the host may invite, and accepting calls
+  Session.allow(inviteeId).
+end note
+@enduml

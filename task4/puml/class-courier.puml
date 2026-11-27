@@ -1,0 +1,39 @@
+@startuml class-courier
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class CourierProfile {
+  - userId: UUID
+  - fullName: String
+  - phone: String
+  - vehicle: VehicleType
+  - status: CourierStatus
+  - rating: double
+  - approvedBy: UUID
+  + approve(by: UUID): void
+  + suspend(by: UUID, reason: String): void
+}
+enum VehicleType {
+  BICYCLE
+  SCOOTER
+  CAR
+}
+enum CourierStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+}
+
+class UserAccount <<external>>
+hide <<external>> members
+
+CourierProfile --> VehicleType
+CourierProfile --> CourierStatus
+CourierProfile ..> UserAccount : userId «ref by ID»
+@enduml

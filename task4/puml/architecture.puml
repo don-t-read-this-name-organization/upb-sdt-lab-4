@@ -1,0 +1,84 @@
+@startuml architecture
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+actor "Customer" as cust
+actor "Restaurant staff" as rest
+actor "Courier" as cour
+actor "Admin" as adm
+
+package "Edge" {
+  [API Gateway] as gw
+  [Realtime Gateway\n(WebSocket)] as rt
+}
+
+package "Core Services" {
+  [Identity] as idn
+  [Customer] as cus
+  [Restaurant & Menu] as rm
+  [Discovery] as disc
+  [Order\n(saga orchestrator)] as ord
+  [Payment] as pay
+  [Dispatch] as dis
+  [Courier] as crs
+  [Courier Location] as loc
+  [ETA] as eta
+  [Notification] as notif
+}
+
+queue "Kafka" as bus
+database "Redis\n(GEO, cache, pub/sub)" as redis
+database "PostgreSQL\n(per service)" as pg
+database "OpenSearch\n(geo index)" as os
+
+cloud "Payment Provider\n(PSP)" as psp
+cloud "Maps Provider\n(routing, geocoding)" as maps
+
+cust --> gw : REST
+rest --> gw : REST
+cour --> gw : REST
+cust <--> rt : WSS
+rest <--> rt : WSS
+cour <--> rt : WSS (offers, GPS)
+
+gw --> idn
+gw --> cus
+gw --> rm
+gw --> disc
+gw --> ord
+gw --> pay
+
+ord --> pay : authorize / capture / void
+ord --> eta
+pay --> psp
+eta --> maps
+dis --> maps
+dis --> redis : nearest available couriers
+loc --> redis : latest positions
+rt <-- redis : fan-out
+rt --> loc : GPS updates
+
+rm --> pg
+cus --> pg
+ord --> pg
+pay --> pg
+idn --> pg
+disc --> os
+rm --> bus : MenuUpdated
+bus --> disc : re-index
+
+ord --> bus : OrderPlaced / StatusChanged
+bus --> dis : OrderReadySoon
+dis --> bus : CourierAssigned
+bus --> ord
+bus --> notif
+bus --> rt
+
+adm --> gw : REST
+gw --> crs
+crs --> pg
+crs --> bus : CourierApproved
+bus --> dis
+
+@enduml

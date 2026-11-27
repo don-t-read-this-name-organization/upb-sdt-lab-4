@@ -1,0 +1,60 @@
+@startuml seq-chat
+!theme plain
+autonumber
+
+actor "Participant" as U
+participant "Web Client\n(sender)" as C
+participant "API Gateway" as GW
+participant "Realtime Gateway\n(node A)" as RTA
+participant "Chat\nService" as CH
+database "Redis" as R
+database "Cassandra\n(chat)" as CAS
+participant "Realtime Gateway\n(node B)" as RTB
+participant "Other participants'\nclients" as O
+queue "Kafka" as K
+
+== Opening the chat (history) ==
+
+C -> GW : GET /sessions/{sid}/messages?limit=50
+GW -> CH : forward
+CH -> CAS : SELECT * FROM messages\nWHERE session_id = ? AND bucket = ?\nORDER BY id DESC LIMIT 50
+CAS --> CH : rows
+CH --> GW : 200 [messages]
+GW --> C : 200
+
+== Sending a message ==
+
+U -> C : type message, press Enter
+C -> RTA : WS chat.send {sessionId, content, clientMsgId}
+RTA -> CH : SendMessage(userId, sessionId, content, clientMsgId)
+CH -> R : SISMEMBER session:{sid}:participants userId
+
+alt not a participant
+  CH --> RTA : error NOT_PARTICIPANT
+  RTA --> C : WS chat.error
+else rate limit exceeded (e.g. > 5 msg/s)
+  CH --> RTA : error RATE_LIMITED
+  RTA --> C : WS chat.error
+else ok
+  CH -> CH : check length, sanitize,\nid = TimeUUID(now)
+  CH -> CAS : INSERT INTO messages ...
+  CH -> R : PUBLISH session:{sid} chat.message
+  CH --> RTA : ack {clientMsgId, id, sentAt}
+  RTA --> C : WS chat.ack (mark as sent)
+  R ->> RTA : chat.message
+  R ->> RTB : chat.message
+  RTA ->> O : WS chat.message (sockets on node A)
+  RTB ->> O : WS chat.message (sockets on node B)
+  CH ->> K : ChatMessageSent (moderation, analytics)
+end
+
+note right of C
+  The sender also receives the broadcast;
+  it removes the duplicate using clientMsgId.
+end note
+note over CAS
+  Partition key (session_id, bucket):
+  avoids huge "hot" partitions
+  (Discord lesson).
+end note
+@enduml

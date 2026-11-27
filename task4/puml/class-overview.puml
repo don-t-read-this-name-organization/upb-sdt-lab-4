@@ -1,0 +1,68 @@
+@startuml class-overview
+!theme plain
+hide members
+skinparam packageStyle rectangle
+
+package "Identity" {
+  class UserAccount
+}
+package "Customer" {
+  class CustomerProfile
+  class Address
+}
+package "Restaurant & Menu" {
+  class Restaurant
+  class Menu
+  class MenuItem
+}
+package "Discovery" {
+  class RestaurantDocument
+}
+package "Order " {
+  class Cart
+  class Order
+  class OrderItem
+  class OrderSaga
+}
+package "Payment " {
+  class Payment
+  class LedgerEntry
+  class Refund
+}
+package "Courier" {
+  class CourierProfile
+}
+package "Dispatch" {
+  class DeliveryJob
+  class Offer
+  class CourierAvailability
+}
+package "Courier Location" {
+  class CourierPosition
+}
+package "ETA" {
+  class EtaEstimate
+}
+
+CustomerProfile *-- Address
+Restaurant *-- Menu
+Menu *-- MenuItem
+Order *-- OrderItem
+Order -- OrderSaga
+Payment *-- LedgerEntry
+Payment *-- Refund
+DeliveryJob *-- Offer
+
+CustomerProfile ..> UserAccount : «ref by ID»
+CourierProfile ..> UserAccount : «ref by ID»
+RestaurantDocument ..> Restaurant : «ref by ID»
+Order ..> CustomerProfile : «ref by ID»
+Order ..> Restaurant : «ref by ID»
+OrderItem ..> MenuItem : «ref by ID»
+Payment ..> Order : «ref by ID»
+DeliveryJob ..> Order : «ref by ID»
+Offer ..> CourierProfile : «ref by ID»
+CourierAvailability ..> CourierProfile : «ref by ID»
+CourierPosition ..> CourierProfile : «ref by ID»
+EtaEstimate ..> Order : «ref by ID»
+@enduml

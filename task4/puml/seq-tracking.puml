@@ -1,0 +1,43 @@
+@startuml seq-tracking
+!theme plain
+autonumber
+
+participant "Courier\nApp" as CA
+participant "Realtime\nGateway" as RT
+participant "Courier Location\nService" as LOC
+database "Redis\n(GEO, pub/sub)" as R
+participant "ETA\nService" as ETA
+participant "Maps\nProvider" as MAP
+participant "Customer\nWeb App" as C
+
+loop every 5 s while online
+  CA -> RT : WS location {lat, lon, heading, accuracy, recordedAt}
+  RT -> LOC : update(courierId from token, position)
+  LOC -> LOC : drop if accuracy > 50 m\nor recordedAt older than stored one
+  LOC -> R : GEOADD couriers:positions\n(+ couriers:available if AVAILABLE)
+  LOC -> R : find active TrackingLink for courier
+  opt courier is delivering an order (PICKED_UP)
+    LOC -> R : PUBLISH order:{orderId} courier.position
+    R ->> RT : courier.position
+    RT ->> C : WS move marker on the map
+  end
+end
+
+loop every 60 s, or when off the expected route
+  ETA -> R : latest courier position
+  ETA -> MAP : travel time courier → customer
+  MAP --> ETA : 7 min
+  ETA ->> RT : EtaUpdated {orderId, eta}
+  RT ->> C : WS "Arriving in about 7 min"
+end
+
+note over LOC
+  Positions can arrive out of order on a mobile
+  network. Keeping only the one with the newest
+  recordedAt prevents the marker jumping back.
+end note
+note over C
+  The customer sees the position only while
+  TrackingLink is active (PICKED_UP → DELIVERED).
+end note
+@enduml

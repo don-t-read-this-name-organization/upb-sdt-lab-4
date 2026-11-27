@@ -1,0 +1,30 @@
+@startuml class-identity
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+
+class UserAccount {
+  - id: UUID
+  - email: String
+  - passwordHash: String
+  - status: AccountStatus
+  - createdAt: Instant
+  + verifyPassword(raw: String): boolean
+  + suspend(): void
+}
+class RefreshToken {
+  - tokenHash: String
+  - issuedAt: Instant
+  - expiresAt: Instant
+  - revoked: boolean
+  + isValid(now: Instant): boolean
+  + revoke(): void
+}
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+UserAccount "1" *-- "0..*" RefreshToken
+UserAccount --> AccountStatus
+@enduml

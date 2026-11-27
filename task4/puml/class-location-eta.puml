@@ -1,0 +1,69 @@
+@startuml class-location-eta
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+package "Courier Location Service" {
+  class CourierPosition <<Redis GEO>> {
+    - courierId: UUID
+    - location: GeoPoint
+    - headingDeg: int
+    - speedKmh: double
+    - accuracyM: double
+    - recordedAt: Instant
+    + isStale(now: Instant): boolean
+  }
+  class TrackingLink {
+    - orderId: UUID
+    - courierId: UUID
+    - customerId: UUID
+    - active: boolean
+  }
+}
+
+package "ETA Service" {
+  class EtaEstimate {
+    - orderId: UUID
+    - prepRemainingMin: int
+    - travelToRestaurantMin: int
+    - travelToCustomerMin: int
+    - bufferMin: int
+    - computedAt: Instant
+    + estimatedDeliveryAt(): Instant
+  }
+}
+
+class CourierProfile <<external>>
+class Order <<external>>
+hide <<external>> members
+
+TrackingLink ..> CourierPosition : streams >
+CourierPosition ..> CourierProfile : courierId «ref by ID»
+TrackingLink ..> Order : orderId «ref by ID»
+EtaEstimate ..> Order : orderId «ref by ID»
+
+note bottom of TrackingLink
+  The customer may see the courier's
+  position only while the link is active
+  (PICKED_UP → DELIVERED).
+end note
+
+class DeliveryTrace <<PostgreSQL, daily partitions>> {
+  - orderId: UUID
+  - courierId: UUID
+  - points: List<GeoPoint + recordedAt>
+  - startedAt: Instant
+  - endedAt: Instant
+}
+TrackingLink ..> DeliveryTrace : records >
+note bottom of DeliveryTrace
+  only PICKED_UP → DELIVERED;
+  partitions older than 30 days are dropped
+end note
+
+@enduml

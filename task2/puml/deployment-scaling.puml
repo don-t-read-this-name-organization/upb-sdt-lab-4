@@ -1,0 +1,61 @@
+@startuml deployment-scaling
+!theme plain
+skinparam nodesep 30
+skinparam ranksep 40
+
+actor "Users" as users
+
+node "CDN (edge locations)" as cdn
+
+node "Kubernetes cluster (EU region)" {
+  node "Load Balancer" as lb
+  node "API Gateway ×N" as gw
+  node "Realtime Gateway ×4-6\n(≈ 10-20k WS each)" as rt
+
+  node "Stateless services (autoscaled)" {
+    component "Identity ×2+" as id
+    component "Social ×2+" as soc
+    component "Playlist ×3+" as pl
+    component "Catalog ×2+" as cat
+    component "Media ×2+" as med
+    component "Session ×3+" as ss
+    component "Chat ×3+" as ch
+    component "Notification ×2+" as notif
+  }
+}
+
+node "Redis Cluster\n(sharded by {sessionId},\nprimary + replica per shard)" as redis
+node "Kafka\n(3 brokers, 12-24 partitions/topic)" as kafka
+node "PostgreSQL\n(primary + read replicas)" as pg
+node "Cassandra\n(≥ 3 nodes, RF = 3)" as cas
+node "OpenSearch\n(≥ 2 nodes)" as os
+node "Object Storage (S3)" as s3
+
+users --> cdn : audio (≈ 8 Gbps)
+users --> lb : REST + WSS
+cdn --> s3 : cache miss only
+lb --> gw
+lb --> rt
+gw --> id
+gw --> soc
+gw --> pl
+gw --> cat
+gw --> med
+rt <--> ss
+rt <--> ch
+rt <-- redis : sharded pub/sub
+ss --> redis : CAS sequencer
+ch --> cas
+ch --> redis
+id --> pg
+soc --> pg
+pl --> pg
+cat --> os
+med --> s3
+soc --> kafka
+pl --> kafka
+ch --> kafka
+ss --> kafka
+kafka --> notif
+kafka --> rt
+@enduml

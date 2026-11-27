@@ -1,0 +1,58 @@
+@startuml seq-place-order
+!theme plain
+autonumber
+
+actor "Customer" as U
+participant "Web App" as C
+participant "API Gateway" as GW
+participant "Order Service\n(+ OrderSaga)" as ORD
+database "Redis\n(cart)" as R
+database "Order DB\n(PostgreSQL)" as ODB
+participant "Restaurant &\nMenu Service" as RM
+participant "ETA\nService" as ETA
+participant "Maps\nProvider" as MAP
+participant "Payment\nService" as PAY
+queue "Kafka" as K
+participant "Realtime\nGateway" as RT
+participant "Restaurant\nDashboard" as D
+
+U -> C : "Place order"
+C -> GW : POST /orders\n{addressId, Idempotency-Key}
+GW -> ORD : forward (customerId from JWT)
+ORD -> R : load cart
+ORD -> RM : POST /restaurants/{id}/quote {menuItemIds, dropoff}
+RM --> ORD : current prices, availability,\nisOpen, within delivery radius
+
+alt item unavailable, restaurant closed or too far
+  ORD --> GW : 422 + reason
+  GW --> C : show problem, cart kept
+else ok
+  ORD -> ETA : estimate(restaurant, dropoff, prepTime)
+  ETA -> MAP : travel time restaurant → customer
+  MAP --> ETA : 18 min
+  ETA --> ORD : estimatedDeliveryAt (prep + travel + buffer)
+  ORD -> ODB : BEGIN\nINSERT order (PLACED, price snapshots)\nINSERT saga (AUTHORIZING_PAYMENT)\nCOMMIT
+  ORD -> PAY : POST /payments {orderId, amount, Idempotency-Key}
+  PAY --> ORD : {paymentId, clientSecret}
+  ORD --> GW : 201 {orderId, total, eta, clientSecret}
+  GW --> C : 201
+  ORD -> R : clear cart
+
+  ref over C, PAY : Card entry and authorization (3.5)
+
+  PAY ->> K : PaymentAuthorized {orderId}
+  K ->> ORD : PaymentAuthorized
+  ORD -> ODB : status = PAYMENT_AUTHORIZED\nsaga = AWAITING_RESTAURANT, deadline = now + 3 min\n+ outbox(OrderPlaced)
+  ORD ->> K : OrderPlaced
+  K ->> RT : OrderPlaced
+  RT ->> D : WS new order (sound alert)
+  RT ->> C : WS order.status "Waiting for restaurant", ETA
+end
+
+note right of ORD
+  The Idempotency-Key makes a retried
+  "Place order" (double click, network
+  drop) return the same order instead
+  of creating a second one.
+end note
+@enduml

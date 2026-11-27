@@ -1,0 +1,65 @@
+@startuml deployment-scaling
+!theme plain
+skinparam nodesep 30
+skinparam ranksep 40
+
+actor "Customers" as cu
+actor "Restaurants" as re
+actor "Couriers" as co
+actor "Admins" as ad
+
+node "CDN\n(menus, images, static app)" as cdn
+
+node "Kubernetes cluster" {
+  node "Load Balancer" as lb
+  node "API Gateway ×N\n(admission control, priorities)" as gw
+  node "Realtime Gateway ×8-14\n(≈ 140k WS)" as rt
+  node "Stateless services (autoscaled,\npre-scaled before promotions)" {
+    component "Order ×4+" as ord
+    component "Payment ×3+" as pay
+    component "Restaurant & Menu ×3+" as rm
+    component "Discovery ×3+" as dis
+    component "Dispatch ×1 per city group" as dsp
+    component "Courier Location ×4+" as loc
+    component "ETA ×3+" as eta
+    component "Identity, Customer,\nCourier, Notification ×2+" as misc
+  }
+}
+
+node "Redis Cluster\n(sharded by city: GEO, cache,\ncoupons, rate limits)" as redis
+node "Kafka\n(3+ brokers)" as kafka
+node "PostgreSQL\n(per service; Order: primary +\nreplicas, later sharded by city)" as pg
+node "Payment DB\n(isolated)" as pdb
+node "OpenSearch\n(geo index, replicas)" as os
+
+cloud "Payment Provider" as psp
+cloud "Maps Provider" as maps
+
+cu --> cdn
+cu --> lb
+re --> lb
+co --> lb
+ad --> lb
+lb --> gw
+lb --> rt
+gw --> ord
+gw --> rm
+gw --> dis
+gw --> misc
+gw --> redis : token buckets
+ord --> pay
+pay --> pdb
+pay --> psp : rate-limited
+rm --> pg
+ord --> pg
+dis --> os
+rt <--> loc : GPS
+loc --> redis
+dsp --> redis
+dsp --> maps
+eta --> maps : cached
+ord --> kafka
+kafka --> dsp
+kafka --> rt
+kafka --> misc
+@enduml

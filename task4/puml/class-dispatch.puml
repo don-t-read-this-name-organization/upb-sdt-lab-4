@@ -1,0 +1,91 @@
+@startuml class-dispatch
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class CourierAvailability <<Redis>> {
+  - courierId: UUID
+  - state: AvailabilityState
+  - location: GeoPoint
+  - vehicle: VehicleType
+  - updatedAt: Instant
+  + goOnline(): void
+  + goOffline(): void
+  + reserveForOffer(): boolean
+}
+class DeliveryJob {
+  - id: UUID
+  - orderId: UUID
+  - pickup: GeoPoint
+  - dropoff: GeoPoint
+  - readyAt: Instant
+  - status: JobStatus
+  - assignedCourierId: UUID
+  - excludedCourierIds: Set<UUID>
+  - attempts: int
+  + nextCandidate(c: List<CourierAvailability>): CourierAvailability
+  + assign(courierId: UUID): void
+}
+class Offer {
+  - id: UUID
+  - courierId: UUID
+  - offeredAt: Instant
+  - expiresAt: Instant
+  - status: OfferStatus
+  + accept(by: UUID): void
+  + decline(by: UUID): void
+  + expire(now: Instant): void
+}
+class MatchingPolicy {
+  - searchRadiusKm: double
+  - maxRadiusKm: double
+  - offerTimeoutSec: int = 30
+  - maxAttempts: int
+  + rank(c: List<CourierAvailability>, job: DeliveryJob): List<CourierAvailability>
+}
+enum AvailabilityState {
+  OFFLINE
+  AVAILABLE
+  OFFERED
+  BUSY
+}
+enum JobStatus {
+  SEARCHING
+  OFFERED
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+}
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+class Order <<external>>
+class CourierProfile <<external>>
+hide <<external>> members
+
+DeliveryJob "1" *-- "0..*" Offer
+DeliveryJob ..> MatchingPolicy : uses >
+CourierAvailability --> AvailabilityState
+DeliveryJob --> JobStatus
+Offer --> OfferStatus
+
+DeliveryJob ..> Order : orderId «ref by ID»
+Offer ..> CourierProfile : courierId «ref by ID»
+CourierAvailability ..> CourierProfile : courierId «ref by ID»
+
+note right of CourierAvailability
+  reserveForOffer() is an atomic
+  AVAILABLE → OFFERED switch, so one
+  courier never gets two offers at once.
+end note
+@enduml

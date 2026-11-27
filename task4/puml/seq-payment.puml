@@ -1,0 +1,64 @@
+@startuml seq-payment
+!theme plain
+autonumber
+
+actor "Customer" as U
+participant "Web App\n(+ PSP card fields)" as C
+participant "Order\nService" as ORD
+participant "Payment\nService" as PAY
+database "Payment DB\n(ledger)" as PDB
+participant "Payment Provider\n(PSP)" as PSP
+participant "Bank\n(3-D Secure)" as BANK
+queue "Kafka" as K
+
+ORD -> PAY : POST /payments {orderId, amount, Idempotency-Key}
+PAY -> PSP : create payment\n(capture = manual, Idempotency-Key)
+PSP --> PAY : {pspPaymentId, clientSecret}
+PAY -> PDB : INSERT payment (PENDING)
+PAY --> ORD : {paymentId, clientSecret}
+
+== Card entry (card data never touches our servers) ==
+
+U -> C : enter card in fields hosted by the PSP (iframe)
+C -> PSP : confirm(clientSecret, card details)
+PSP -> BANK : authorize, Strong Customer Authentication
+BANK --> U : confirm in banking app
+U -> BANK : approve
+BANK --> PSP : authorized
+PSP --> C : status = requires_capture
+C --> U : "Payment confirmed"
+
+== Server-side confirmation ==
+
+PSP -> PAY : webhook "payment authorized" (signed)
+PAY -> PAY : verify webhook signature\nignore if already processed
+alt amount or orderId do not match
+  PAY -> PAY : alert, do nothing
+else ok
+  PAY -> PDB : status = AUTHORIZED\nappend LedgerEntry(AUTHORIZATION)\n+ outbox
+  PAY ->> K : PaymentAuthorized {orderId}
+end
+
+alt card declined / SCA failed
+  PSP -> PAY : webhook "payment failed"
+  PAY -> PDB : status = FAILED + LedgerEntry
+  PAY ->> K : PaymentFailed → saga cancels order
+end
+
+== After delivery ==
+
+K ->> ORD : OrderDelivered
+ORD -> PAY : POST /payments/{id}/capture (Idempotency-Key)
+PAY -> PSP : capture(pspPaymentId)
+PSP --> PAY : captured
+PAY -> PDB : status = CAPTURED\nappend LedgerEntry(CAPTURE)
+PAY ->> K : PaymentCaptured
+K ->> ORD : PaymentCaptured → saga DONE
+
+note over C, PSP
+  Card fields come from the PSP, so we never
+  receive card numbers. This keeps us mostly
+  out of PCI DSS scope (only the simplest
+  self-assessment applies).
+end note
+@enduml

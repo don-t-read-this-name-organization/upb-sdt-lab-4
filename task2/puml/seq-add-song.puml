@@ -1,0 +1,58 @@
+@startuml seq-add-song
+!theme plain
+autonumber
+
+actor "Collaborator" as U
+participant "Web Client" as C
+participant "API Gateway" as GW
+participant "Catalog\nService" as CAT
+database "OpenSearch" as OS
+participant "Playlist\nService" as PL
+database "Playlist DB\n(PostgreSQL)" as PDB
+queue "Kafka" as K
+participant "Realtime\nGateway" as RT
+participant "Other collaborators'\nclients" as O
+
+U -> C : type "bohemian"
+C -> GW : GET /tracks?q=bohemian
+GW -> CAT : forward
+CAT -> OS : fuzzy full-text query
+OS --> CAT : hits
+CAT --> GW : 200 [tracks]
+GW --> C : 200
+
+U -> C : click "Add" on a track
+C -> GW : POST /playlists/{pid}/entries\n{trackId, afterEntryId}
+GW -> PL : forward (userId from JWT)
+PL -> PDB : load playlist + collaborator(userId)
+
+alt not a collaborator, or role = VIEWER
+  PL --> GW : 403 Forbidden
+  GW --> C : 403
+else role is OWNER or EDITOR
+  PL -> CAT : GET /tracks/{trackId}
+  CAT --> PL : 200 (exists)
+  PL -> PL : position = between(after.position, next.position)
+  PL -> PDB : BEGIN\nINSERT entry\nUPDATE playlist SET version = version + 1\nINSERT outbox(PlaylistTrackAdded)\nCOMMIT
+  PL --> GW : 201 {entry, version}
+  GW --> C : 201
+  C -> C : show the new entry
+  PL ->> K : PlaylistTrackAdded (key = playlistId)
+  K ->> RT : PlaylistTrackAdded
+  RT -> RT : find subscribers of playlist (Redis)
+  RT ->> O : WS playlist.entryAdded {entry, version}
+  O -> O : insert by position;\nif a version is missing → refetch playlist
+end
+
+note right of K
+  Key = playlistId → every event of one
+  playlist lands in the same partition,
+  so they are consumed in order.
+end note
+note over PL, PDB
+  Two users adding at the same time never conflict:
+  each entry gets its own fractional position.
+  Thanks to the live link, an active session
+  plays the new entry when it reaches it.
+end note
+@enduml

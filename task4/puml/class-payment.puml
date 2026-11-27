@@ -1,0 +1,75 @@
+@startuml class-payment
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class Payment {
+  - id: UUID
+  - orderId: UUID
+  - customerId: UUID
+  - amount: Money
+  - status: PaymentStatus
+  - pspPaymentId: String
+  - idempotencyKey: String
+  - createdAt: Instant
+  + authorize(): void
+  + capture(): void
+  + void(): void
+  + refund(amount: Money, reason: String, by: UUID): Refund
+}
+class LedgerEntry <<append-only>> {
+  - id: UUID
+  - type: LedgerEntryType
+  - amount: Money
+  - pspReference: String
+  - createdAt: Instant
+}
+class Refund {
+  - id: UUID
+  - amount: Money
+  - reason: String
+  - requestedBy: UUID
+  - status: RefundStatus
+}
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  VOIDED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+}
+enum LedgerEntryType {
+  AUTHORIZATION
+  CAPTURE
+  VOID
+  REFUND
+}
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+class Order <<external>>
+class "Payment Provider (PSP)" as PSP <<external>>
+hide <<external>> members
+
+Payment "1" *-- "1..*" LedgerEntry
+Payment "1" *-- "0..*" Refund
+Payment --> PaymentStatus
+LedgerEntry --> LedgerEntryType
+Refund --> RefundStatus
+Payment ..> Order : orderId «ref by ID»
+Payment ..> PSP : pspPaymentId
+
+note bottom of Refund
+  requestedBy must have role ADMIN
+end note
+@enduml

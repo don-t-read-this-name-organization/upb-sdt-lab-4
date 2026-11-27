@@ -1,0 +1,45 @@
+@startuml class-customer
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class CustomerProfile {
+  - userId: UUID
+  - fullName: String
+  - phone: String
+  + addAddress(a: Address): void
+  + defaultAddress(): Address
+}
+class Address {
+  - id: UUID
+  - label: String
+  - street: String
+  - city: String
+  - postalCode: String
+  - location: GeoPoint
+  - instructions: String
+  - isDefault: boolean
+}
+class GeoPoint <<value object>> {
+  - lat: double
+  - lon: double
+  + distanceKm(other: GeoPoint): double
+}
+
+class UserAccount <<external>>
+hide <<external>> members
+
+CustomerProfile "1" *-- "0..*" Address
+Address *-- GeoPoint
+CustomerProfile ..> UserAccount : userId «ref by ID»
+
+note bottom of Address
+  location is filled by geocoding
+  the address with the maps provider
+end note
+@enduml

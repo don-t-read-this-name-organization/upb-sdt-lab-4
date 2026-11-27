@@ -1,0 +1,71 @@
+@startuml seq-dispatch
+!theme plain
+autonumber
+
+participant "Order Service\n(+ OrderSaga)" as ORD
+queue "Kafka" as K
+participant "Dispatch\nService" as DSP
+database "Redis\n(GEO, availability)" as R
+participant "Maps\nProvider" as MAP
+participant "Realtime\nGateway" as RT
+participant "Courier\nApp" as CA
+actor "Courier" as CR
+participant "Customer\nWeb App" as C
+
+ORD -> ORD : timer: now >= dispatchAt
+ORD ->> K : RequestCourier {orderId, pickup, dropoff, readyAt}
+K ->> DSP : RequestCourier
+DSP -> DSP : create DeliveryJob (SEARCHING)
+DSP -> R : GEOSEARCH couriers:available\nFROMLONLAT pickup BYRADIUS 3 km
+R --> DSP : candidates
+DSP -> MAP : travel time matrix (candidates → restaurant)
+MAP --> DSP : minutes per candidate
+DSP -> DSP : MatchingPolicy.rank()\n(travel time, then idle time)
+
+loop until a courier accepts or candidates run out
+  DSP -> R : reserveForOffer(best)\natomic AVAILABLE → OFFERED
+  alt reservation failed (courier just took another job)
+    DSP -> DSP : skip to next candidate
+  else reserved
+    DSP -> DSP : Offer (PENDING, expiresAt = now + 30 s)
+    DSP ->> RT : offer
+    RT ->> CA : WS "New delivery: 1.2 km, pickup 12:30"
+    alt courier accepts in time
+      CR -> CA : "Accept"
+      CA -> RT : WS offer.accept {offerId}
+      RT -> DSP : accept(offerId, courierId)
+      DSP -> R : state = BUSY
+      DSP -> DSP : Offer ACCEPTED, job ASSIGNED
+      DSP ->> K : CourierAssigned {orderId, courierId}
+    else declines, or 30 s pass
+      DSP -> DSP : Offer DECLINED / EXPIRED\nexclude courier, attempts++
+      DSP -> R : state = AVAILABLE
+    end
+  end
+end
+
+alt nobody accepted
+  DSP -> DSP : widen radius (3 → 5 → 8 km) and retry
+  DSP ->> K : DispatchFailed (after maxAttempts)
+  K ->> ORD : DispatchFailed → alert admin, inform customer
+end
+
+K ->> ORD : CourierAssigned
+ORD -> ORD : order.courierId = courierId\nsaga = DELIVERING
+ORD ->> K : OrderStatusChanged
+K ->> RT
+RT ->> C : WS "Ana is on her way to the restaurant"
+
+== Navigation, pickup, delivery ==
+
+CA -> CA : open route to restaurant\n(deep link to Google Maps / Waze)
+CR -> CA : "Picked up"
+CA -> ORD : POST /orders/{id}/pickup (via API Gateway)
+ORD -> ORD : status = PICKED_UP\nactivate TrackingLink
+CA -> CA : open route to customer
+CR -> CA : "Delivered"
+CA -> ORD : POST /orders/{id}/deliver
+ORD -> ORD : status = DELIVERED\nsaga = CAPTURING_PAYMENT
+ORD ->> K : OrderDelivered
+K ->> DSP : OrderDelivered → courier AVAILABLE again
+@enduml

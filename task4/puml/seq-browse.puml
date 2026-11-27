@@ -1,0 +1,59 @@
+@startuml seq-browse
+!theme plain
+autonumber
+
+actor "Customer" as U
+participant "Web App" as C
+participant "API Gateway" as GW
+participant "Customer\nService" as CUS
+participant "Maps\nProvider" as MAP
+participant "Discovery\nService" as DIS
+database "Redis\n(cache)" as R
+database "OpenSearch" as OS
+participant "Restaurant &\nMenu Service" as RM
+database "Restaurant DB\n(PostgreSQL)" as RDB
+
+opt new delivery address
+  U -> C : type address
+  C -> GW : POST /me/addresses {street, city}
+  GW -> CUS : forward
+  CUS -> MAP : geocode(address)
+  MAP --> CUS : {lat, lon}
+  CUS --> C : 201 Address {id, location}
+end
+
+C -> GW : GET /restaurants?lat=..&lon=..&openNow=true
+GW -> DIS : forward
+DIS -> R : GET results:{geohash cell}:{filters}
+alt cache hit (popular area, < 60 s old)
+  R --> DIS : cached list
+else cache miss
+  DIS -> OS : geo_distance filter (restaurant can deliver here)\n+ isOpenNow + sort by distance, rating
+  OS --> DIS : RestaurantDocuments
+  DIS -> R : SET with TTL 60 s
+end
+DIS --> GW : 200 [restaurants]
+GW --> C : 200
+C --> U : list with distance, prep time, rating
+
+U -> C : open a restaurant
+C -> GW : GET /restaurants/{id}/menu
+GW -> RM : forward
+RM -> R : GET menu:{id}:v{version}
+alt cache hit
+  R --> RM : menu
+else cache miss
+  RM -> RDB : load categories + items
+  RDB --> RM : rows
+  RM -> R : SET menu:{id}:v{version}
+end
+RM --> GW : 200 Menu (ETag = version)
+GW --> C : 200
+C --> U : menu with prices and availability
+
+note over DIS, R
+  Caching by geohash cell: everyone in the
+  same ~1 km area shares one cached result.
+  This matters at lunch and dinner peaks.
+end note
+@enduml

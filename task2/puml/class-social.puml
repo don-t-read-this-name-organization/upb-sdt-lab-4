@@ -1,0 +1,68 @@
+@startuml class-social
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class UserProfile {
+  - userId: UUID
+  - displayName: String
+  - avatarUrl: String
+}
+class Friendship {
+  - id: UUID
+  - requesterId: UUID
+  - addresseeId: UUID
+  - status: FriendshipStatus
+  - createdAt: Instant
+  + accept(by: UUID): void
+  + decline(by: UUID): void
+}
+class Invitation {
+  - id: UUID
+  - inviterId: UUID
+  - inviteeId: UUID
+  - targetType: InvitationTargetType
+  - targetId: UUID
+  - status: InvitationStatus
+  - createdAt: Instant
+  - expiresAt: Instant
+  + accept(by: UUID): void
+  + decline(by: UUID): void
+  + isExpired(now: Instant): boolean
+}
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+enum InvitationTargetType {
+  PLAYLIST
+  SESSION
+}
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+class UserAccount <<external>>
+class Playlist <<external>>
+class ListeningSession <<external>>
+hide <<external>> members
+
+UserProfile "1" -- "0..*" Friendship
+UserProfile "1" -- "0..*" Invitation : sends >
+Friendship --> FriendshipStatus
+Invitation --> InvitationTargetType
+Invitation --> InvitationStatus
+
+UserProfile ..> UserAccount : userId «ref by ID»
+Invitation ..> Playlist : targetId «ref by ID»
+Invitation ..> ListeningSession : targetId «ref by ID»
+@enduml

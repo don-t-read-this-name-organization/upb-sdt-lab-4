@@ -1,0 +1,88 @@
+@startuml class-session
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class ListeningSession {
+  - id: UUID
+  - hostId: UUID
+  - playlistId: UUID
+  - status: SessionStatus
+  - endReason: EndReason
+  - createdAt: Instant
+  - endedAt: Instant
+  + join(userId: UUID): void
+  + leave(userId: UUID): void
+  + onDisconnect(userId: UUID, now: Instant): void
+  + apply(cmd: PlaybackCommand): PlaybackState
+  + end(reason: EndReason): void
+  + allow(userId: UUID): void
+  - requireHost(userId: UUID): void
+  - invitedUserIds: Set<UUID>
+}
+class PlaybackState {
+  - currentEntryId: UUID
+  - currentEntryPosition: String
+  - trackId: UUID
+  - positionMs: long
+  - startedAt: Instant
+  - isPlaying: boolean
+  - version: long
+  + positionAt(now: Instant): long
+}
+class Participant {
+  - userId: UUID
+  - joinedAt: Instant
+  - connected: boolean
+  - lastSeenAt: Instant
+}
+class PlaybackCommand {
+  - type: CommandType
+  - issuedBy: UUID
+  - expectedVersion: long
+  - seekPositionMs: Long
+}
+enum CommandType {
+  PLAY
+  PAUSE
+  SKIP
+  PREVIOUS
+  SEEK
+}
+enum SessionStatus {
+  ACTIVE
+  ENDED
+}
+enum EndReason {
+  HOST_ENDED
+  HOST_LEFT
+  HOST_TIMEOUT
+  PLAYLIST_DELETED
+}
+
+class UserAccount <<external>>
+class Playlist <<external>>
+class PlaylistEntry <<external>>
+hide <<external>> members
+
+ListeningSession "1" *-- "1" PlaybackState
+ListeningSession "1" *-- "1..*" Participant
+ListeningSession ..> PlaybackCommand : handles >
+ListeningSession --> SessionStatus
+ListeningSession --> EndReason
+PlaybackCommand --> CommandType
+
+ListeningSession ..> UserAccount : hostId «ref by ID»
+ListeningSession ..> Playlist : playlistId «ref by ID»
+PlaybackState ..> PlaylistEntry : currentEntryId «ref by ID»
+
+note right of ListeningSession
+  leave(hostId) → end(HOST_LEFT)
+  host disconnected > 60 s → end(HOST_TIMEOUT)
+end note
+@enduml

@@ -1,0 +1,36 @@
+@startuml class-chat
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class ChatMessage {
+  - id: TimeUUID
+  - sessionId: UUID
+  - senderId: UUID
+  - content: String
+  - type: MessageType
+  - sentAt: Instant
+}
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+class ListeningSession <<external>>
+class UserAccount <<external>>
+hide <<external>> members
+
+ChatMessage --> MessageType
+ChatMessage ..> ListeningSession : sessionId «ref by ID»
+ChatMessage ..> UserAccount : senderId «ref by ID»
+
+note bottom of ChatMessage
+  SYSTEM messages: "Ana joined",
+  "Host skipped to <track>", "Session ended"
+end note
+@enduml

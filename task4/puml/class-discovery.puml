@@ -1,0 +1,40 @@
+@startuml class-discovery
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class RestaurantDocument <<read model>> {
+  - restaurantId: UUID
+  - name: String
+  - cuisines: List<String>
+  - location: GeoPoint
+  - deliveryRadiusKm: double
+  - avgPrepTimeMin: int
+  - rating: double
+  - isOpenNow: boolean
+  - priceLevel: int
+}
+class SearchQuery <<value object>> {
+  - near: GeoPoint
+  - text: String
+  - cuisines: List<String>
+  - openNow: boolean
+  - page: int
+}
+class RestaurantIndex {
+  + search(q: SearchQuery): List<RestaurantDocument>
+  + upsert(doc: RestaurantDocument): void
+}
+
+class Restaurant <<external>>
+hide <<external>> members
+
+RestaurantIndex "1" o-- "0..*" RestaurantDocument
+RestaurantIndex ..> SearchQuery : uses >
+RestaurantDocument ..> Restaurant : restaurantId «ref by ID»
+@enduml

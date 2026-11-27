@@ -1,0 +1,91 @@
+@startuml class-restaurant
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class Restaurant {
+  - id: UUID
+  - name: String
+  - address: String
+  - location: GeoPoint
+  - cuisines: List<String>
+  - status: RestaurantStatus
+  - avgPrepTimeMin: int
+  - deliveryRadiusKm: double
+  - maxActiveOrders: int
+  - pausedUntil: Instant
+  + isOpenAt(t: Instant): boolean
+  + approve(by: UUID): void
+  + suspend(by: UUID, reason: String): void
+  + pauseOrders(until: Instant): void
+  + resumeOrders(): void
+  + hasCapacity(): boolean
+  + canTakeOrders(now: Instant): boolean
+}
+
+class OpeningHours {
+  - dayOfWeek: DayOfWeek
+  - opensAt: LocalTime
+  - closesAt: LocalTime
+}
+class StaffMember {
+  - userId: UUID
+  - role: StaffRole
+}
+class Menu {
+  - id: UUID
+  - version: long
+  - updatedAt: Instant
+}
+class MenuCategory {
+  - name: String
+  - sortOrder: int
+}
+class MenuItem {
+  - id: UUID
+  - name: String
+  - description: String
+  - price: Money
+  - available: boolean
+  - imageUrl: String
+  + markUnavailable(): void
+}
+class Money <<value object>> {
+  - amountMinor: long
+  - currency: String
+  + plus(m: Money): Money
+  + times(q: int): Money
+}
+class GeoPoint <<value object>> {
+  - lat: double
+  - lon: double
+}
+enum RestaurantStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+}
+enum StaffRole {
+  OWNER
+  STAFF
+}
+
+class UserAccount <<external>>
+hide <<external>> members
+
+Restaurant "1" *-- "1..7" OpeningHours
+Restaurant "1" *-- "1..*" StaffMember
+Restaurant "1" *-- "1" Menu
+Menu "1" *-- "1..*" MenuCategory
+MenuCategory "1" *-- "1..*" MenuItem
+MenuItem *-- Money
+Restaurant *-- GeoPoint
+Restaurant --> RestaurantStatus
+StaffMember --> StaffRole
+StaffMember ..> UserAccount : userId «ref by ID»
+@enduml

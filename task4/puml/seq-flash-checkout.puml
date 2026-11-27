@@ -1,0 +1,50 @@
+@startuml seq-flash-checkout
+!theme plain
+autonumber
+
+actor "Customer" as U
+participant "Web App" as C
+participant "API Gateway\n(admission control)" as GW
+database "Redis" as R
+participant "Order\nService" as ORD
+participant "Restaurant &\nMenu Service" as RM
+participant "Payment\nService" as PAY
+
+U -> C : "Place order" with code PROMO50
+C -> GW : POST /orders {coupon: PROMO50}
+GW -> R : take token from bucket checkout:{cityId}
+
+alt no token left (city at capacity)
+  GW --> C : 429 + Retry-After: 20 s\n(waiting room position)
+  C --> U : "You're in line, about 20 s"
+  ... 20 s later ...
+  C -> GW : retry with the same Idempotency-Key
+  GW -> R : take token
+end
+
+GW -> ORD : forward
+ORD -> RM : quote(items) + hasCapacity()
+alt restaurant at maxActiveOrders
+  RM --> ORD : busy
+  ORD --> C : 409 "Restaurant is busy, try in 15 min"
+else capacity ok
+  RM --> ORD : prices, ok
+  ORD -> R : DECR coupon:PROMO50:remaining
+  alt result < 0
+    ORD -> R : INCR (give it back)
+    ORD -> ORD : price without discount
+    ORD --> C : 200 "Promotion sold out", ask to confirm full price
+  else coupon reserved
+    ORD -> ORD : apply 50 %, create order (PLACED)
+    ORD -> PAY : authorize (provider rate limiter)
+    PAY --> ORD : clientSecret
+    ORD --> C : 201 order
+  end
+end
+
+note over ORD, R
+  If the payment later fails or the order is
+  rejected, the saga's compensation also gives
+  the coupon back.
+end note
+@enduml
