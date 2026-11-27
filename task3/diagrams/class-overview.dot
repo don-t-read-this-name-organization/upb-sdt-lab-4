@@ -1,0 +1,27 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  compound=true; newrank=true;
+  node [shape=box, style="rounded", fontsize=9.5, margin="0.08,0.03"];
+  subgraph cluster_dir { label="Directory"; style=rounded; Employee; Department; }
+  subgraph cluster_ticket { label="Ticket"; style=rounded; Ticket; Comment; StatusChange; Attachment; }
+  subgraph cluster_route { label="Routing & SLA"; style=rounded; SupportTeam; TeamMember; RoutingRule; SlaPolicy; SlaClock; }
+  subgraph cluster_rep { label="Reporting"; style=rounded; TicketFact; DailyTeamMetric; }
+  subgraph cluster_notif { label="Notification"; style=rounded; NotificationPreference; DeliveryLog; }
+  Department -> Employee [arrowhead=none];
+  Ticket -> Comment [arrowhead=none, arrowtail=diamond, dir=both];
+  Ticket -> StatusChange [arrowhead=none, arrowtail=diamond, dir=both];
+  Ticket -> Attachment [arrowhead=none, arrowtail=diamond, dir=both];
+  SupportTeam -> TeamMember [arrowhead=none, arrowtail=diamond, dir=both];
+  RoutingRule -> SupportTeam [arrowhead=vee];
+  SlaClock -> SlaPolicy [arrowhead=vee];
+  DailyTeamMetric -> TicketFact [arrowhead=vee];
+  Ticket -> Employee [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  Ticket -> SupportTeam [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  SlaClock -> Ticket [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  TeamMember -> Employee [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  TicketFact -> Ticket [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  NotificationPreference -> Employee [style=dashed, arrowhead=vee, label="ref by ID", color=gray35, fontcolor=gray30];
+  DeliveryLog -> NotificationPreference [style=invis];
+}

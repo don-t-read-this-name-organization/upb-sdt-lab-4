@@ -1,0 +1,11 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  Employee [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><b>Employee</b></td></tr><hr/><tr><td align="left" balign="left">-id: UUID<br align="left"/>-externalId: String<br align="left"/>-email: String<br align="left"/>-displayName: String<br align="left"/>-departmentId: UUID<br align="left"/>-roles: Set&lt;Role&gt;<br align="left"/>-active: boolean<br align="left"/>-syncedAt: Instant<br align="left"/></td></tr><hr/><tr><td align="left" balign="left">+hasRole(role: Role): boolean<br align="left"/>+deactivate(): void<br align="left"/></td></tr></table>>];
+  Department [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><b>Department</b></td></tr><hr/><tr><td align="left" balign="left">-id: UUID<br align="left"/>-name: String<br align="left"/>-managerId: UUID<br align="left"/></td></tr><hr/><tr><td align="left" balign="left">+isManagedBy(employeeId: UUID): boolean<br align="left"/></td></tr></table>>];
+  Role [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><font point-size="8">&laquo;enumeration&raquo;</font><br/><b>Role</b></td></tr><hr/><tr><td align="left" balign="left">EMPLOYEE<br align="left"/>AGENT<br align="left"/>TEAM_LEAD<br align="left"/>MANAGER<br align="left"/>ADMIN<br align="left"/></td></tr></table>>];
+  Department -> Employee [arrowhead=none, arrowtail=none, dir=both, taillabel="1", headlabel="0..*", label=" belongs to", style=solid];
+  Employee -> Role [style=dashed, arrowhead=vee, label=""];
+  { rank=same; Department; Role; }
+}

@@ -1,0 +1,38 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  rankdir=TB; newrank=true;
+  node [shape=box, style="rounded", fontsize=10, margin="0.1,0.05"];
+  emp [label="Employee / IT Agent / Manager\n(Web SPA)", style="rounded,filled", fillcolor="gray94"];
+  idp [label="Company IdP\n(Entra ID: OIDC login, SCIM)", style="rounded,dashed"];
+  mailin [label="Mailbox\nhelpdesk@company", style="rounded,dashed"];
+  mailout [label="Mail server / Teams", style="rounded,dashed"];
+  gw [label="API Gateway"]; rt [label="Realtime Gateway (SSE)"];
+  redis [label="Redis\n(connections, pub/sub)", shape=cylinder];
+  ing [label="Email Ingestion"];
+  subgraph cluster_tk { label=""; style="rounded,dotted"; tk [label="Ticket"]; tkdb [label="PostgreSQL\n(+ outbox)", shape=cylinder, style=""]; obj [label="Object storage\n(attachments)", shape=cylinder, style=""]; tk -> tkdb; tk -> obj; }
+  subgraph cluster_rs { label=""; style="rounded,dotted"; rs [label="Routing & SLA"]; rsdb [label="PostgreSQL", shape=cylinder, style=""]; rs -> rsdb; }
+  subgraph cluster_dir { label=""; style="rounded,dotted"; dir [label="Directory"]; dirdb [label="PostgreSQL", shape=cylinder, style=""]; dir -> dirdb; }
+  subgraph cluster_rep { label=""; style="rounded,dotted"; rep [label="Reporting"]; repdb [label="PostgreSQL\n(read model)", shape=cylinder, style=""]; rep -> repdb; }
+  subgraph cluster_nt { label=""; style="rounded,dotted"; nt [label="Notification"]; ntdb [label="PostgreSQL", shape=cylinder, style=""]; nt -> ntdb; }
+  bus [label="Event bus (Kafka):   TicketCreated · TicketAssigned · TicketStatusChanged · CommentAdded · SlaAtRisk · SlaBreached", style="filled", fillcolor="gray96", width=8];
+  { rank=same; mailin; emp; idp; }
+  { rank=same; gw; rt; redis; }
+  { rank=same; ing; tk; rs; dir; rep; nt; mailout; }
+  mailin -> emp [style=invis]; emp -> idp [label=" SSO", style=dashed, arrowhead=vee];
+  gw -> rt [style=invis]; rt -> redis;
+  ing -> tk -> rs -> dir -> rep -> nt -> mailout [style=invis];
+  emp -> gw [label=" HTTPS"]; emp -> rt [label=" SSE"];
+  idp -> dir [label=" SCIM", style=dashed];
+  gw -> tk; gw -> rs; gw -> dir; gw -> rep;
+  mailin -> ing [style=dashed];
+  ing -> tk [constraint=false]; rs -> tk [label="assign", constraint=false];
+  nt -> mailout [constraint=false];
+  tkdb -> bus [label=" outbox relay"]; rsdb -> bus [label=" publish"];
+  dirdb -> bus [style=invis]; repdb -> bus [style=invis]; ntdb -> bus [style=invis]; obj -> bus [style=invis];
+  bus -> rs [style=dashed, arrowhead=vee, constraint=false];
+  bus -> rep [style=dashed, arrowhead=vee, constraint=false];
+  bus -> nt [style=dashed, arrowhead=vee, constraint=false];
+  bus -> rt [style=dashed, arrowhead=vee, constraint=false];
+}

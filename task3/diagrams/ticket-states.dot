@@ -1,0 +1,18 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="gray96", fontsize=10, margin="0.12,0.05"];
+  start [shape=circle, style=filled, fillcolor=black, label="", width=0.16];
+  stop [shape=doublecircle, style=filled, fillcolor=black, label="", width=0.12];
+  start -> OPEN [label="submit"];
+  OPEN -> IN_PROGRESS [label="agent starts work\n(first response)"];
+  OPEN -> CLOSED [label="employee cancels"];
+  IN_PROGRESS -> ON_HOLD [label="waiting for employee\n(SLA paused)"];
+  ON_HOLD -> IN_PROGRESS [label="employee replies\n(SLA resumed)"];
+  IN_PROGRESS -> RESOLVED [label="agent resolves\n(resolution note)"];
+  RESOLVED -> IN_PROGRESS [label="employee reopens\n(within 7 days)"];
+  RESOLVED -> CLOSED [label="employee confirms\nor 7 days pass"];
+  CLOSED -> stop;
+}

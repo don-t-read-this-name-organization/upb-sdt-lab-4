@@ -1,0 +1,15 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  NotificationPreference [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><b>NotificationPreference</b></td></tr><hr/><tr><td align="left" balign="left">-employeeId: UUID<br align="left"/>-channel: Channel<br align="left"/>-eventType: String<br align="left"/>-enabled: boolean<br align="left"/></td></tr><hr/><tr><td align="left" balign="left">+allows(channel: Channel, eventType: String): boolean<br align="left"/></td></tr></table>>];
+  DeliveryLog [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><b>DeliveryLog</b></td></tr><hr/><tr><td align="left" balign="left">-id: UUID<br align="left"/>-eventId: UUID<br align="left"/>-recipientId: UUID<br align="left"/>-channel: Channel<br align="left"/>-status: DeliveryStatus<br align="left"/>-attempts: int<br align="left"/>-sentAt: Instant<br align="left"/></td></tr><hr/><tr><td align="left" balign="left">+markSent(now: Instant): void<br align="left"/>+retryable(): boolean<br align="left"/></td></tr></table>>];
+  Channel [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><font point-size="8">&laquo;enumeration&raquo;</font><br/><b>Channel</b></td></tr><hr/><tr><td align="left" balign="left">EMAIL<br align="left"/>TEAMS<br align="left"/>IN_APP<br align="left"/></td></tr></table>>];
+  DeliveryStatus [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded"><tr><td bgcolor="gray95"><font point-size="8">&laquo;enumeration&raquo;</font><br/><b>DeliveryStatus</b></td></tr><hr/><tr><td align="left" balign="left">QUEUED<br align="left"/>SENT<br align="left"/>FAILED<br align="left"/></td></tr></table>>];
+  Employee [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="4" style="rounded" color="gray55" bgcolor="gray92"><tr><td><font color="gray40" point-size="8">&laquo;external&raquo;</font></td></tr><tr><td><font color="gray35">Employee</font></td></tr></table>>];
+  NotificationPreference -> Channel [style=dashed, arrowhead=vee, label=""];
+  DeliveryLog -> DeliveryStatus [style=dashed, arrowhead=vee, label=""];
+  DeliveryLog -> Channel [style=dashed, arrowhead=vee, label=""];
+  NotificationPreference -> Employee [style=dashed, arrowhead=vee, label="employeeId «ref by ID»", color="gray30", fontcolor="gray25"];
+  DeliveryLog -> Employee [style=dashed, arrowhead=vee, label="recipientId «ref by ID»", color="gray30", fontcolor="gray25"];
+}

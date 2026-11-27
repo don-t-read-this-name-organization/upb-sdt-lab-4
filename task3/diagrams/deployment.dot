@@ -1,0 +1,22 @@
+digraph G {
+  graph [fontname="Crimson Text", nodesep=0.45, ranksep=0.55, pad=0.1, bgcolor="white"];
+  node [shape=plain, fontname="Crimson Text", fontsize=10];
+  edge [fontname="Crimson Text", fontsize=8.5, arrowsize=0.7, penwidth=0.8];
+  rankdir=LR; compound=true;
+  node [shape=box, style="rounded", fontsize=9.5, margin="0.1,0.05"];
+  users [label="Browsers (company network, VPN, home)", style="rounded,filled", fillcolor="gray94"];
+  subgraph cluster_k8s { label="Kubernetes cluster (EU region, 3 availability zones)"; style=rounded;
+    lb [label="Load balancer + WAF"];
+    subgraph cluster_stateless { label="Stateless services (autoscaled)"; style="rounded,dashed";
+      gw [label="API Gateway ×2+"]; rt [label="Realtime Gateway ×2+"]; tk [label="Ticket ×3+"];
+      rs [label="Routing & SLA ×2"]; rep [label="Reporting ×2"]; nt [label="Notification ×2"]; dir [label="Directory ×2"]; }
+    subgraph cluster_state { label="Stateful"; style="rounded,dashed";
+      node [shape=cylinder, style=""];
+      pg [label="PostgreSQL\nprimary + 2 replicas"]; kafka [label="Kafka\n3 brokers, RF = 3"]; redis [label="Redis\nprimary + replica"]; }
+  }
+  obj [label="Object storage\n(versioned, encrypted)", shape=cylinder];
+  users -> lb; lb -> gw; lb -> rt;
+  lb -> tk [style=invis];
+  tk -> pg [ltail=cluster_stateless, lhead=cluster_state];
+  tk -> obj;
+}
