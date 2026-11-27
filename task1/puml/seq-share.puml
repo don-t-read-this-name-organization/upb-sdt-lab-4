@@ -1,0 +1,37 @@
+@startuml seq-share
+!theme plain
+autonumber
+
+actor "Visitor" as V
+participant "Browser\n(site loader JS)" as B
+participant "API Gateway" as GW
+participant "Analytics Collector" as COL
+queue "Kafka" as K
+participant "Social platform" as SOC
+participant "CDN" as CDN
+
+V -> B : click "Share" on the portfolio
+B -> B : show the share sheet with the canonical page address
+V -> B : choose a platform, for example Behance
+B -> SOC : open the platform's share page\nwith the canonical page address
+
+B -> GW : POST /events (beacon)\n{portfolioId, eventType = SHARE, platform}
+GW -> COL : forward
+COL -> COL : validate, compute visitorHash
+COL ->> K : analytics.events, key = eventId
+COL --> GW : 202 Accepted
+
+note over SOC
+  Later, the platform's crawler fetches the page
+  to build the preview card for the post.
+end note
+SOC -> CDN : GET /{slug}
+CDN --> SOC : HTML with og:title, og:description\nand og:image = /media/{mediaId}/og-1200.jpg
+SOC -> CDN : GET /media/{mediaId}/og-1200.jpg
+CDN --> SOC : 1200 px JPEG
+note over SOC
+  The OG_1200 variant is generated once by the
+  Media Worker, so every platform gets a
+  correctly sized image.
+end note
+@enduml

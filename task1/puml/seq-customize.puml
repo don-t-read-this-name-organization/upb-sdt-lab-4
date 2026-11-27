@@ -1,0 +1,44 @@
+@startuml seq-customize
+!theme plain
+autonumber
+
+actor "Creator" as U
+participant "Web App\n(editor)" as C
+participant "API Gateway" as GW
+participant "Portfolio Service\n(+ template catalogue)" as PF
+database "Portfolio DB\n(PostgreSQL)" as PDB
+participant "Site Preview\n(draft renderer)" as PV
+
+U -> C : open "Appearance" and pick a template
+C -> GW : GET /templates
+GW -> PF : forward
+PF --> C : active templates with their allowed options
+
+U -> C : set accent colour, font, grid and social links
+C -> GW : PATCH /portfolios/{id}/theme\n{templateId, accentColor, fontFamily,\ngridStyle, socialLinks, version}
+GW -> PF : forward (ownerId from JWT)
+PF -> PF : check portfolio.creatorId = ownerId
+PF -> PF : validate against the template: values from\nallowlists, hex colour, https links to known\nplatforms, no HTML, CSS or script fields
+
+alt invalid settings
+  PF --> GW : 422 {field errors}
+  GW --> C : show the errors next to the fields
+else valid settings
+  PF -> PDB : UPDATE portfolio SET theme = ..., version = version + 1\nWHERE id = ? AND version = ?
+  alt version changed in the meantime
+    PDB --> PF : 0 rows
+    PF --> GW : 409 Conflict
+    GW --> C : reload the settings and ask to retry
+  else saved
+    PDB --> PF : 1 row
+    PF --> GW : 200 {theme, version}
+    GW --> C : 200
+    C -> GW : GET /portfolios/{id}/preview
+    GW -> PV : forward
+    PV -> PF : read draft albums, items and theme
+    PF --> PV : draft content
+    PV --> C : preview HTML (noindex, no-store)
+    C -> C : show the preview in a sandboxed iframe
+  end
+end
+@enduml

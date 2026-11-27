@@ -1,0 +1,104 @@
+@startuml class-analytics
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+abstract class AnalyticsEvent <<immutable>> {
+  - eventId: UUID
+  - portfolioId: UUID
+  - visitorHash: String
+  - occurredAt: Instant
+  - schemaVersion: int
+}
+class PageView {
+  - pageKind: PageKind
+  - albumId: UUID
+  - referrerDomain: String
+  - countryCode: String
+  - deviceClass: DeviceClass
+}
+class MediaView {
+  - mediaId: UUID
+  - albumId: UUID
+  - watchedSeconds: int
+}
+class ShareEvent {
+  - platform: SocialPlatform
+  - pageKind: PageKind
+}
+class EventCollector <<service>> {
+  + accept(batch: List<AnalyticsEvent>): int
+  - validate(event: AnalyticsEvent): boolean
+  - hashVisitor(ip: String, userAgent: String, day: Date): String
+}
+class DailyRollup <<read model>> {
+  - portfolioId: UUID
+  - day: Date
+  - views: long
+  - uniqueVisitors: long
+  - sharesByPlatform: Map<SocialPlatform, long>
+  - topMediaIds: List<UUID>
+}
+class PortfolioOwnerIndex <<read model>> {
+  - portfolioId: UUID
+  - ownerId: UUID
+}
+class ReportService <<service>> {
+  + report(ownerId: UUID, portfolioId: UUID, range: DateRange): ReportView
+}
+class DateRange <<value object>> {
+  - from: Date
+  - to: Date
+}
+enum PageKind {
+  HOME
+  ALBUM
+}
+enum DeviceClass {
+  MOBILE
+  TABLET
+  DESKTOP
+}
+enum SocialPlatform {
+  INSTAGRAM
+  BEHANCE
+  X
+  LINKEDIN
+  PINTEREST
+  FACEBOOK
+}
+
+class Portfolio <<external>>
+class MediaAsset <<external>>
+hide <<external>> members
+
+AnalyticsEvent <|-- PageView
+AnalyticsEvent <|-- MediaView
+AnalyticsEvent <|-- ShareEvent
+PageView --> PageKind
+PageView --> DeviceClass
+ShareEvent --> SocialPlatform
+ShareEvent --> PageKind
+EventCollector ..> AnalyticsEvent : creates
+DailyRollup ..> AnalyticsEvent : aggregated from
+ReportService ..> DailyRollup : reads
+ReportService ..> PortfolioOwnerIndex : checks owner
+ReportService ..> DateRange : uses
+AnalyticsEvent ..> Portfolio : portfolioId «ref by ID»
+MediaView ..> MediaAsset : mediaId «ref by ID»
+PortfolioOwnerIndex ..> Portfolio : portfolioId «ref by ID»
+note right of AnalyticsEvent
+  visitorHash = HMAC of IP and user agent
+  with a key that is deleted after 24 hours.
+  The IP address itself is never stored.
+end note
+note bottom of DailyRollup
+  Built by ClickHouse materialized views.
+  uniqueVisitors uses HyperLogLog sketches.
+end note
+@enduml

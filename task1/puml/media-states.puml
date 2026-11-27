@@ -1,0 +1,17 @@
+@startuml media-states
+!theme plain
+
+[*] --> PENDING_UPLOAD : upload ticket issued
+PENDING_UPLOAD --> PROCESSING : owner completes upload,\nsize and checksum match
+PENDING_UPLOAD --> EXPIRED : ticket not used within 15 min
+PROCESSING --> PROCESSING : retry after a transient error
+PROCESSING --> READY : all variants written,\nmalware scan clean
+PROCESSING --> REJECTED : unsupported file or\nmalware found
+PROCESSING --> FAILED : 5 attempts failed
+READY --> DELETED : owner deletes the media
+REJECTED --> DELETED : owner removes the file
+FAILED --> DELETED : owner removes the file
+EXPIRED --> [*]
+DELETED --> [*] : originals and derivatives purged
+
+@enduml

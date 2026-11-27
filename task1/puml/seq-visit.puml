@@ -1,0 +1,54 @@
+@startuml seq-visit
+!theme plain
+autonumber
+
+actor "Visitor" as V
+participant "Browser\n(site loader JS)" as B
+participant "CDN" as CDN
+database "Public bucket\n(sites, derivatives)" as PUB
+participant "API Gateway" as GW
+participant "Analytics Collector" as COL
+queue "Kafka" as K
+participant "Analytics Aggregator" as AGG
+database "ClickHouse" as CH
+
+V -> B : open the portfolio page
+B -> CDN : GET /{slug}
+alt cache hit
+  CDN --> B : index.html (static, a few tens of KB)
+else cache miss
+  CDN -> PUB : fetch index.html
+  PUB --> CDN : index.html
+  CDN --> B : index.html
+end
+
+B -> CDN : GET /media/{mediaId}/medium-1200.avif
+note right
+  Images use srcset and loading="lazy", so
+  only the sizes that are on screen are
+  downloaded. Derivative URLs contain the
+  media id, so they can be cached for a year.
+end note
+CDN --> B : image bytes
+
+B -> GW : POST /events (beacon, batch of up to 20)\n{portfolioId, pageKind, mediaId?, albumId?}
+note right
+  Sent with navigator.sendBeacon after
+  1 second or when the page is hidden.
+  No cookies are set.
+end note
+GW -> GW : rate limit per IP address and portfolio
+GW -> COL : forward
+COL -> COL : validate schema, check that the portfolio is published
+COL -> COL : visitorHash = HMAC(dailyKey, IP + user agent)\nthe IP address is discarded here
+COL ->> K : analytics.events, key = eventId
+COL --> GW : 202 Accepted
+GW --> B : 202
+
+K ->> AGG : batch of events
+AGG -> CH : INSERT batch
+note right
+  ClickHouse materialized views update the
+  hourly and daily rollups from the raw events.
+end note
+@enduml

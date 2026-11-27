@@ -1,0 +1,42 @@
+@startuml seq-analytics
+!theme plain
+autonumber
+
+actor "Creator" as U
+participant "Web App\n(dashboard)" as C
+participant "API Gateway" as GW
+participant "Analytics Reporting" as REP
+database "Analytics DB\n(owner index)" as IDX
+database "Redis\n(report cache)" as R
+database "ClickHouse\n(rollups)" as CH
+
+U -> C : open "Statistics" for the last 30 days
+C -> GW : GET /portfolios/{id}/analytics?from=...&to=...
+GW -> GW : verify the access token (JWT)
+GW -> REP : forward (ownerId from JWT)
+REP -> IDX : who owns portfolio {id}?
+
+alt not the owner
+  IDX --> REP : another creator
+  REP --> GW : 403 Forbidden
+  GW --> C : 403
+else owner
+  IDX --> REP : ownerId
+  REP -> R : GET report:{id}:{from}:{to}
+  alt cache hit
+    R --> REP : cached report
+  else cache miss
+    REP -> CH : SELECT views, uniques, shares, top media\nFROM daily_rollup WHERE portfolio = ? AND day BETWEEN ? AND ?
+    CH --> REP : rows
+    REP -> R : SET with a 5-minute TTL
+  end
+  REP --> GW : 200 {views, uniqueVisitors, sharesByPlatform, topMedia}
+  GW --> C : 200
+  C --> U : charts of views per day and shares per platform
+end
+
+note over REP
+  Today's numbers come from the hourly rollups,
+  so the dashboard is at most a few minutes behind.
+end note
+@enduml

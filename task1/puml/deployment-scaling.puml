@@ -1,0 +1,54 @@
+@startuml deployment-scaling
+!theme plain
+skinparam componentStyle rectangle
+
+actor "Creator and visitor" as user
+[CDN with WAF\n(edge, global)] as cdn
+[API Gateway\n2 to 20 replicas] as gw
+[Identity, Portfolio, Media\n2 to 10 replicas each] as api
+[Analytics Collector\n3 to 30 replicas] as col
+[Analytics Reporting\n2 to 6 replicas] as rep
+[Media Worker (images)] as mwi
+[Media Worker (video)] as mwv
+[Site Publisher\n2 to 10 replicas] as sp
+[Analytics Aggregator\n3 to 12 replicas] as agg
+database "Kafka\nreplicated across zones" as kafka
+database "PostgreSQL\nprimary + replica per zone" as pg
+database "Redis" as redis
+database "ClickHouse\nsharded, replicated" as ch
+database "Object storage\nreplicated across zones" as os
+
+user -[hidden]down- cdn
+cdn -[hidden]right- gw
+gw -[hidden]down- api
+api -[hidden]down- mwi
+mwi -[hidden]right- mwv
+mwv -[hidden]right- sp
+sp -[hidden]right- agg
+pg -[hidden]down- redis
+redis -[hidden]down- ch
+ch -[hidden]down- os
+kafka -[hidden]right- pg
+api -[hidden]right- col
+col -[hidden]right- rep
+
+user --> cdn : HTTPS
+user --> gw : REST, beacons
+gw --> api
+gw --> col
+gw --> rep
+gw --> redis
+api --> pg
+api --> kafka
+col --> kafka
+kafka --> mwi
+kafka --> mwv
+kafka --> sp
+kafka --> agg
+agg --> ch
+rep --> ch
+mwi --> os
+mwv --> os
+sp --> os
+cdn --> os : origin fetch
+@enduml

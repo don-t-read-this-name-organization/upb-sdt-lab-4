@@ -1,0 +1,43 @@
+@startuml class-overview
+!theme plain
+hide members
+skinparam packageStyle rectangle
+
+package "Identity" {
+  class UserAccount
+  class Session
+}
+package "Portfolio" {
+  class CreatorProfile
+  class Portfolio
+  class Album
+  class AlbumItem
+  class ThemeSettings
+  class Template
+  class SiteSnapshot
+}
+package "Media" {
+  class MediaAsset
+  class Derivative
+  class UploadTicket
+}
+package "Analytics" {
+  class AnalyticsEvent
+  class DailyRollup
+}
+
+UserAccount "1" *-- "0..*" Session
+CreatorProfile "1" -- "0..*" Portfolio
+Portfolio "1" *-- "1" ThemeSettings
+Portfolio "1" *-- "0..*" Album
+Album "1" *-- "0..*" AlbumItem
+MediaAsset "1" *-- "1..*" Derivative
+MediaAsset "1" -- "0..1" UploadTicket
+ThemeSettings "*" --> "1" Template
+
+CreatorProfile ..> UserAccount : id «ref by ID»
+MediaAsset ..> CreatorProfile : ownerId «ref by ID»
+AlbumItem ..> MediaAsset : mediaId «ref by ID»
+AnalyticsEvent ..> Portfolio : portfolioId «ref by ID»
+DailyRollup ..> AnalyticsEvent : aggregated from
+@enduml

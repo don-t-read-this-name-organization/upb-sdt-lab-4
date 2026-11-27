@@ -1,0 +1,71 @@
+@startuml architecture
+!theme plain
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+actor "Creator" as cre
+actor "Visitor" as vis
+cloud "Social platforms" as soc
+
+package "Edge" {
+  [CDN\n(pages, media, WAF)] as cdn
+  [API Gateway\n(JWT, rate limits)] as gw
+}
+
+package "Core Services" {
+  [Identity] as idn
+  [Portfolio\n(albums, themes, publishing)] as pf
+  [Media\n(upload tickets, status)] as md
+  [Analytics Collector] as col
+  [Analytics Reporting] as rep
+}
+
+package "Workers" {
+  [Media Worker\n(validate, resize, transcode, scan)] as mw
+  [Site Publisher\n(static HTML)] as sp
+  [Analytics Aggregator] as agg
+}
+
+queue "Kafka" as bus
+database "PostgreSQL\n(per service)" as pg
+database "Originals bucket\n(private)" as orig
+database "Public bucket\n(derivatives, sites)" as pub
+database "ClickHouse\n(events, rollups)" as ch
+database "Redis\n(rate limits, cache)" as redis
+
+cre --> gw : REST
+cre ..> orig : presigned PUT\n(file bytes)
+vis --> cdn : HTTPS
+vis --> gw : beacon (events)
+soc --> cdn : crawl Open Graph tags
+
+cdn --> pub : origin fetch
+gw --> idn
+gw --> pf
+gw --> md
+gw --> rep
+gw --> col
+gw --> redis
+
+idn --> pg
+pf --> pg
+md --> pg
+
+md --> orig : issue presigned URLs
+md --> bus : MediaUploaded
+bus --> mw
+mw --> orig : read original
+mw --> pub : write derivatives
+mw --> bus : MediaReady / MediaRejected
+bus --> pf
+
+pf --> bus : PortfolioPublished
+bus --> sp
+sp --> pub : write HTML and snapshots
+
+col --> bus : analytics events
+bus --> agg
+agg --> ch
+rep --> ch
+rep --> redis
+@enduml

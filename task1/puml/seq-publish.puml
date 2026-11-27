@@ -1,0 +1,47 @@
+@startuml seq-publish
+!theme plain
+autonumber
+
+actor "Creator" as U
+participant "Web App\n(editor)" as C
+participant "API Gateway" as GW
+participant "Portfolio Service" as PF
+database "Portfolio DB\n(PostgreSQL)" as PDB
+queue "Kafka" as K
+participant "Site Publisher" as SP
+participant "Media Service" as MS
+database "Public bucket\n(sites)" as PUB
+participant "CDN" as CDN
+
+U -> C : click "Publish"
+C -> GW : POST /portfolios/{id}/publish
+GW -> PF : forward (ownerId from JWT)
+PF -> PF : at least one album with items, every item READY,\nno REJECTED items, slug still unique
+
+PF -> PDB : BEGIN\nINSERT site_snapshot (version = n+1, RENDERING)\nUPDATE portfolio SET status = PUBLISHED\nINSERT outbox (PortfolioPublished)\nCOMMIT
+PF --> GW : 202 {snapshotVersion}
+GW --> C : 202, "Publishing..."
+
+note over PF
+  The outbox relay publishes the
+  event after the commit.
+end note
+PF ->> K : PortfolioPublished {portfolioId, version}
+K ->> SP : PortfolioPublished
+SP -> PF : GET /internal/portfolios/{id}/content?version=n+1
+PF --> SP : albums, items, theme, social links
+SP -> MS : GET /internal/media?ids=...
+MS --> SP : derivative keys, sizes and dimensions
+SP -> SP : render home and album pages as static HTML\nwith srcset, Open Graph tags and no scripts from users
+
+alt rendering or upload fails
+  SP -> PF : snapshot FAILED (previous version stays live)
+else all files written
+  SP -> PUB : PUT /snapshots/{slug}/v(n+1)/ (kept for rollback)
+  SP -> PUB : PUT /{slug}/albums/*.html (TTL 60 s)
+  SP -> PUB : PUT /{slug}/index.html last (TTL 60 s)
+  SP -> CDN : invalidate /{slug}/ and /{slug}/albums/*
+  SP -> PF : snapshot READY
+  SP ->> K : SitePublished {slug, version}
+end
+@enduml

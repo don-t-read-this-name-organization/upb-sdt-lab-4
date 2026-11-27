@@ -1,0 +1,144 @@
+@startuml class-portfolio
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class CreatorProfile {
+  - id: UUID
+  - displayName: String
+  - bio: String
+  - avatarMediaId: UUID
+  - createdAt: Instant
+}
+class Portfolio <<aggregate>> {
+  - id: UUID
+  - creatorId: UUID
+  - slug: String
+  - title: String
+  - status: PortfolioStatus
+  - visibility: Visibility
+  - version: long
+  - publishedAt: Instant
+  + changeTheme(settings: ThemeSettings, expectedVersion: long): void
+  + addAlbum(title: String): Album
+  + publish(now: Instant): SiteSnapshot
+  + unpublish(): void
+}
+class Album {
+  - id: UUID
+  - title: String
+  - description: String
+  - position: int
+  - visibility: Visibility
+  + addItem(mediaId: UUID, caption: String): AlbumItem
+  + moveItem(itemId: UUID, position: int): void
+}
+class AlbumItem {
+  - mediaId: UUID
+  - mediaStatus: MediaStatus
+  - caption: String
+  - position: int
+}
+class ThemeSettings <<value object>> {
+  - templateId: UUID
+  - accentColor: String
+  - fontFamily: FontFamily
+  - gridStyle: GridStyle
+  - showSocialLinks: boolean
+}
+class SocialLink <<value object>> {
+  - platform: SocialPlatform
+  - url: String
+}
+class Template <<catalogue>> {
+  - id: UUID
+  - name: String
+  - version: int
+  - active: boolean
+  + validate(settings: ThemeSettings): List<String>
+}
+class SiteSnapshot {
+  - version: int
+  - status: SnapshotStatus
+  - renderedAt: Instant
+  + markReady(): void
+  + markFailed(reason: String): void
+}
+enum PortfolioStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+enum Visibility {
+  PUBLIC
+  UNLISTED
+}
+enum SnapshotStatus {
+  RENDERING
+  READY
+  FAILED
+}
+enum FontFamily {
+  SERIF
+  SANS
+  MONO
+}
+enum GridStyle {
+  MASONRY
+  GRID
+  FULL_BLEED
+}
+enum SocialPlatform {
+  INSTAGRAM
+  BEHANCE
+  X
+  LINKEDIN
+  PINTEREST
+  FACEBOOK
+}
+enum MediaStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  REJECTED
+  FAILED
+  EXPIRED
+  DELETED
+}
+
+class UserAccount <<external>>
+class MediaAsset <<external>>
+hide <<external>> members
+
+CreatorProfile "1" -- "0..*" Portfolio : owns
+Portfolio "1" *-- "1" ThemeSettings
+Portfolio "1" *-- "0..*" Album
+Portfolio "1" *-- "0..*" SocialLink
+Portfolio "1" *-- "0..*" SiteSnapshot
+Album "1" *-- "0..*" AlbumItem
+ThemeSettings "0..*" --> "1" Template : uses
+ThemeSettings --> FontFamily
+ThemeSettings --> GridStyle
+SocialLink --> SocialPlatform
+Portfolio --> PortfolioStatus
+Portfolio --> Visibility
+SiteSnapshot --> SnapshotStatus
+AlbumItem --> MediaStatus
+
+CreatorProfile ..> UserAccount : id «ref by ID»
+AlbumItem ..> MediaAsset : mediaId «ref by ID»
+note right of SocialLink
+  Only https links to the platforms
+  in SocialPlatform are accepted.
+end note
+note right of Portfolio
+  Version is checked on every theme
+  change, so two editors cannot
+  overwrite each other silently.
+end note
+@enduml

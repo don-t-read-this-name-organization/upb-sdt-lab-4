@@ -1,0 +1,53 @@
+@startuml seq-delete-account
+!theme plain
+autonumber
+
+actor "Creator" as U
+participant "Web App\n(settings)" as C
+participant "API Gateway" as GW
+participant "Identity Service" as IDN
+database "Identity DB\n(PostgreSQL)" as IDB
+queue "Kafka" as K
+participant "Portfolio Service" as PF
+participant "Site Publisher" as SP
+participant "Media Service" as MS
+database "Originals and public\nbuckets" as OBJ
+participant "CDN" as CDN
+participant "Analytics Aggregator" as AGG
+database "ClickHouse" as CH
+
+U -> C : "Delete my account"
+C -> U : ask for the password (and a one-time code if MFA is on)
+U -> C : confirm
+C -> GW : POST /account/deletion {password, otp}
+GW -> IDN : forward (accountId from JWT)
+IDN -> IDN : verify password and second factor, rate limited
+IDN -> IDB : BEGIN\nstatus = DELETION_REQUESTED\nrevoke all sessions\nerase email and password hash\nINSERT outbox (UserDeleted)\nCOMMIT
+IDN --> GW : 202 Accepted
+GW --> C : 202, "Your account is being deleted"
+
+note over IDN
+  Revoking the sessions logs the user out
+  on every device. Access tokens expire
+  within 15 minutes at the latest.
+end note
+
+IDN ->> K : UserDeleted {accountId}
+K ->> PF : UserDeleted
+PF -> PF : unpublish every portfolio, delete the profile
+PF ->> K : PortfolioDeleted {portfolioId} (one per portfolio)
+K ->> SP : PortfolioDeleted
+SP -> OBJ : delete the site pages and snapshots
+SP -> CDN : invalidate /{slug}/*
+K ->> MS : UserDeleted
+MS -> OBJ : delete originals and derivatives of the account
+MS -> CDN : invalidate cached media
+K ->> AGG : PortfolioDeleted
+AGG -> CH : delete raw events of the portfolio\n(aggregated counts hold no personal data)
+
+note over CH
+  Every consumer retries until it succeeds.
+  The account row stays as a tombstone with
+  its identifier until all services confirm.
+end note
+@enduml

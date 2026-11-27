@@ -1,0 +1,56 @@
+@startuml class-identity
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+
+class UserAccount {
+  - id: UUID
+  - email: String
+  - passwordHash: String
+  - role: Role
+  - status: AccountStatus
+  - mfaEnabled: boolean
+  - createdAt: Instant
+  + register(email: String, password: String): UserAccount
+  + authenticate(email: String, password: String, otp: String): Session
+  + enableMfa(): void
+  + disable(): void
+}
+class Session {
+  - id: UUID
+  - accountId: UUID
+  - refreshTokenHash: String
+  - expiresAt: Instant
+  - revokedAt: Instant
+  + refresh(token: String): Session
+  + revoke(): void
+}
+class TokenIssuer <<service>> {
+  + issueAccessToken(account: UserAccount): String
+  + verify(token: String): Claims
+}
+class Claims <<value object>> {
+  - sub: UUID
+  - role: Role
+  - exp: Instant
+}
+enum Role {
+  CREATOR
+  ADMIN
+}
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+UserAccount "1" *-- "0..*" Session
+UserAccount --> Role
+UserAccount --> AccountStatus
+TokenIssuer ..> UserAccount : issues for
+TokenIssuer ..> Claims : creates
+note right of Claims
+  Access token: 15 minutes.
+  Refresh token: 30 days, stored only
+  as a hash in the Session.
+end note
+@enduml

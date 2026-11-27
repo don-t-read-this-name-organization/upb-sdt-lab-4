@@ -1,0 +1,109 @@
+@startuml class-media
+!theme plain
+hide empty members
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor<<external>> #EEEEEE
+  BorderColor<<external>> #999999
+  FontColor<<external>> #777777
+}
+
+class MediaAsset <<aggregate>> {
+  - id: UUID
+  - ownerId: UUID
+  - kind: MediaKind
+  - status: MediaStatus
+  - originalKey: String
+  - contentType: String
+  - sizeBytes: long
+  - sha256: String
+  - width: int
+  - height: int
+  - durationSec: int
+  - uploadedAt: Instant
+  + markUploaded(sha256: String): void
+  + startProcessing(): void
+  + markReady(variants: List<Derivative>): void
+  + reject(reason: String): void
+  + delete(): void
+}
+class UploadTicket <<value object>> {
+  - assetId: UUID
+  - uploadUrl: String
+  - maxBytes: long
+  - expiresAt: Instant
+  + isValid(now: Instant): boolean
+}
+class Derivative {
+  - variant: Variant
+  - format: Format
+  - key: String
+  - width: int
+  - bytes: long
+}
+class ProcessingAttempt {
+  - attempt: int
+  - startedAt: Instant
+  - finishedAt: Instant
+  - error: String
+}
+class MediaWorker <<service>> {
+  + process(assetId: UUID): void
+  - verifyType(content: byte[]): MediaKind
+  - scanForMalware(key: String): ScanResult
+  - stripMetadata(image: byte[]): byte[]
+  - generateVariants(asset: MediaAsset): List<Derivative>
+}
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+enum MediaStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  REJECTED
+  FAILED
+  EXPIRED
+  DELETED
+}
+enum Variant {
+  THUMB_400
+  MEDIUM_1200
+  LARGE_2400
+  OG_1200
+  VIDEO_POSTER
+  HLS_720
+  HLS_1080
+}
+enum Format {
+  AVIF
+  WEBP
+  JPEG
+  HLS
+}
+enum ScanResult {
+  CLEAN
+  INFECTED
+  ERROR
+}
+
+class CreatorProfile <<external>>
+hide <<external>> members
+
+MediaAsset "1" *-- "0..*" Derivative
+MediaAsset "1" *-- "0..*" ProcessingAttempt
+MediaAsset "1" -- "0..1" UploadTicket
+MediaAsset --> MediaKind
+MediaAsset --> MediaStatus
+Derivative --> Variant
+Derivative --> Format
+MediaWorker ..> MediaAsset : processes
+MediaWorker ..> ScanResult : receives
+MediaAsset ..> CreatorProfile : ownerId «ref by ID»
+note right of Derivative
+  Images: AVIF and WebP at three sizes,
+  plus one JPEG for social previews.
+  Videos: a poster frame and HLS renditions.
+end note
+@enduml

@@ -1,0 +1,65 @@
+@startuml seq-upload
+!theme plain
+autonumber
+
+actor "Creator" as U
+participant "Web App\n(editor)" as C
+participant "API Gateway" as GW
+participant "Media Service" as MS
+database "Media DB\n(PostgreSQL)" as MDB
+database "Originals bucket\n(private)" as ORIG
+participant "Portfolio Service" as PF
+queue "Kafka" as K
+participant "Media Worker" as MW
+database "Public bucket\n(derivatives)" as PUB
+
+U -> C : add photos to album "Lisbon 2026"
+C -> GW : POST /media/upload-tickets\n{kind, sizeBytes, contentType, sha256}
+GW -> MS : forward (ownerId from JWT)
+MS -> MS : check type, size limit and storage quota
+MS -> MDB : INSERT media (PENDING_UPLOAD)
+MS --> GW : 201 {mediaId, uploadUrl, expiresAt}
+GW --> C : 201
+
+C -> ORIG : PUT uploadUrl (file bytes)
+note right
+  The file goes straight to storage, so the
+  API servers never handle the bytes. The
+  signed URL fixes the object key, the size,
+  the content type and a 15-minute lifetime.
+end note
+ORIG --> C : 200
+
+C -> GW : POST /media/{mediaId}/complete
+GW -> MS : forward
+MS -> ORIG : HEAD object, compare size and sha256
+MS -> MDB : status = PROCESSING
+MS ->> K : MediaUploaded {mediaId}
+MS --> C : 202 Accepted
+
+C -> GW : POST /albums/{albumId}/items {mediaId, caption}
+GW -> PF : forward (ownerId from JWT)
+PF -> PF : check that the album belongs to the owner
+PF --> C : 201 item added, shown as processing
+
+K ->> MW : MediaUploaded
+MW -> ORIG : read original
+MW -> MW : check magic bytes, scan for malware,\ndecode pixels, strip EXIF (GPS data)
+
+alt malware found or unsupported file
+  MW -> MDB : status = REJECTED
+  MW ->> K : MediaRejected {mediaId}
+  K ->> PF : MediaRejected
+  PF -> PF : mark the album item as rejected
+else valid file
+  MW -> PUB : write THUMB_400, MEDIUM_1200, LARGE_2400\nin AVIF and WebP, plus OG_1200 JPEG
+  note right
+    Videos get a VIDEO_POSTER and
+    HLS_720 / HLS_1080 renditions instead.
+  end note
+  MW -> MDB : status = READY, save derivatives
+  MW ->> K : MediaReady {mediaId}
+  K ->> PF : MediaReady
+  PF -> PF : mark the album item as READY
+end
+@enduml
